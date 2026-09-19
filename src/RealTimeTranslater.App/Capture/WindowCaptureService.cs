@@ -5,13 +5,68 @@ using RealTimeTranslater.Core.Models;
 
 namespace RealTimeTranslater.App.Capture;
 
-public sealed class WindowCaptureService
+public sealed class WindowCaptureService : IDisposable
 {
-    public CaptureFrame? Capture(IntPtr targetWindow)
+    private WindowsGraphicsCaptureBackend? _windowsGraphicsCapture;
+    private IntPtr _captureTarget;
+    private bool _wgcUnavailable;
+    private string? _wgcFailureReason;
+
+    public string BackendName =>
+        _windowsGraphicsCapture is not null
+            ? "Windows Graphics Capture"
+            : _wgcUnavailable
+                ? "GDI fallback"
+                : "Windows Graphics Capture (initializing)";
+
+    public string? FallbackReason => _wgcFailureReason;
+
+    public async Task<CaptureFrame?> CaptureAsync(
+        IntPtr targetWindow,
+        CancellationToken cancellationToken)
     {
         if (targetWindow == IntPtr.Zero || NativeMethods.IsIconic(targetWindow))
             return null;
 
+        if (_captureTarget != targetWindow)
+        {
+            _windowsGraphicsCapture?.Dispose();
+            _windowsGraphicsCapture = null;
+            _captureTarget = targetWindow;
+            _wgcUnavailable = false;
+            _wgcFailureReason = null;
+        }
+
+        if (!_wgcUnavailable)
+        {
+            try
+            {
+                _windowsGraphicsCapture ??=
+                    new WindowsGraphicsCaptureBackend(targetWindow);
+
+                return await _windowsGraphicsCapture.CaptureAsync(
+                    targetWindow,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _windowsGraphicsCapture?.Dispose();
+                _windowsGraphicsCapture = null;
+                _wgcUnavailable = true;
+                _wgcFailureReason = ex.Message;
+            }
+        }
+
+        return CaptureWithGdi(targetWindow);
+    }
+
+    private static CaptureFrame? CaptureWithGdi(IntPtr targetWindow)
+    {
         if (!NativeMethods.GetClientRect(targetWindow, out var rect))
             return null;
 
@@ -46,9 +101,15 @@ public sealed class WindowCaptureService
                 new PixelRect(origin.X, origin.Y, width, height),
                 scale);
         }
-        catch (Exception)
+        catch
         {
             return null;
         }
+    }
+
+    public void Dispose()
+    {
+        _windowsGraphicsCapture?.Dispose();
+        _windowsGraphicsCapture = null;
     }
 }
