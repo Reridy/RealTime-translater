@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+TestResults/
+coverage/
+tessdata/*.traineddata
+!tessdata/.gitkeep
