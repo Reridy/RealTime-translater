@@ -27,7 +27,9 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void Awake()
     {
-        _publisher = new PipePublisher();
+        _publisher = new PipePublisher(
+            message => Logger.LogInfo(message),
+            message => Logger.LogWarning(message));
         _publisher.Start();
 
         StartCoroutine(PublishLoop());
