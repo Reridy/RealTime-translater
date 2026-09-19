@@ -126,12 +126,17 @@ public sealed class TranslationPipeline : IDisposable
                     {
                         var translationStart = Stopwatch.GetTimestamp();
 
+                        var unityContext =
+                            UnityAdapterTextSelector.BuildTranslationContext(
+                                unitySnapshot);
+
                         _lastUnityTranslations =
                             await _translator.TranslateAsync(
                                 unityRegions,
                                 "auto",
                                 _targetLanguage,
-                                cancellationToken);
+                                cancellationToken,
+                                unityContext);
 
                         _lastUnityTranslationMilliseconds =
                             Stopwatch.GetElapsedTime(
