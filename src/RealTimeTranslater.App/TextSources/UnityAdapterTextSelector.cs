@@ -126,11 +126,20 @@ internal static partial class UnityAdapterTextSelector
                 .ToArray();
         }
 
+        var hasVisibleSpeaker = visible.Any(region =>
+            region.IsSpeakerLike ||
+            SpeakerHints.Any(hint =>
+                $"{region.ObjectName} {region.Hierarchy}"
+                    .Contains(
+                        hint,
+                        StringComparison.OrdinalIgnoreCase)));
+
         var scored = visible
             .Select(region => AnalyzeDialogueCandidate(
                 region,
                 sourceWidth,
-                sourceHeight))
+                sourceHeight,
+                hasVisibleSpeaker))
             .Where(candidate => candidate.IsCandidate)
             .OrderByDescending(candidate => candidate.Score)
             .ThenBy(candidate => candidate.Region.Y)
@@ -153,7 +162,8 @@ internal static partial class UnityAdapterTextSelector
     private static DialogueCandidate AnalyzeDialogueCandidate(
         UnityAdapterRegionDto region,
         int screenWidth,
-        int screenHeight)
+        int screenHeight,
+        bool hasVisibleSpeaker)
     {
         var text = region.Text.Trim();
         var lowered = text.ToLowerInvariant();
@@ -211,6 +221,19 @@ internal static partial class UnityAdapterTextSelector
                 hasJapaneseSentencePunctuation ||
                 (words >= 5 && text.Length >= 24) ||
                 (japaneseCount >= 8 && text.Length >= 16)
+            );
+
+        var looksLikeShortDialogue =
+            hasVisibleSpeaker &&
+            !region.IsSelectable &&
+            !hasSpeakerHint &&
+            !looksLikeShortHudLabel &&
+            region.Y >= screenHeight * 0.45 &&
+            region.Width >= screenWidth * 0.16 &&
+            text.Length is >= 2 and <= 80 &&
+            (
+                words is >= 1 and <= 10 ||
+                japaneseCount >= 2
             );
 
         var labelLineCount =
@@ -302,7 +325,9 @@ internal static partial class UnityAdapterTextSelector
             probableChoiceButton ||
             looksLikeProseBlock ||
             (!region.IsSelectable &&
-             (hasStrongDialogueHint || looksLikeSentence));
+             (hasStrongDialogueHint ||
+              looksLikeSentence ||
+              looksLikeShortDialogue));
 
         if (!isCandidate)
             return Reject(region);
@@ -329,6 +354,9 @@ internal static partial class UnityAdapterTextSelector
 
         if (looksLikeProseBlock)
             score += 70;
+
+        if (looksLikeShortDialogue)
+            score += 55;
 
         if (hasProseMetadataHint)
             score += 20;
