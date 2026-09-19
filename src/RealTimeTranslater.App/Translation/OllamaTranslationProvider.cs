@@ -89,6 +89,7 @@ public sealed partial class OllamaTranslationProvider : ITranslationProvider
             "You are a Korean game localization translator. " +
             "Translate ONLY the source text into natural Korean. " +
             "Preserve the exact meaning: negation, subject/object relations, chronology, emotion, hesitation, emphasis, jokes, and character tone. " +
+            "Treat stutters/hesitation literally; for example, a source like 'N-no' should remain a hesitant refusal such as '아-아니요', not become an apology. " +
             "Do not invent or omit information. " +
             "Use fluent spoken Korean for dialogue and concise standard Korean for UI. " +
             "Keep proper names consistent and preserve numbers/placeholders/control tokens. " +
@@ -248,6 +249,10 @@ public sealed partial class OllamaTranslationProvider : ITranslationProvider
 
         var hangul = translated.Count(IsHangul);
         var han = translated.Count(IsHan);
+        var latinWords = LatinWordRegex().Matches(translated).Count;
+        var latinLetters = translated.Count(ch =>
+            ch is >= 'A' and <= 'Z' ||
+            ch is >= 'a' and <= 'z');
 
         // Sentence-length output should be primarily Korean, not a long run of
         // CJK ideographs from a degenerate multilingual generation.
@@ -257,6 +262,11 @@ public sealed partial class OllamaTranslationProvider : ITranslationProvider
                 return true;
 
             if (han >= 8 && han > hangul / 2)
+                return true;
+
+            // Korean dialogue should not suddenly trail off into English.
+            // Allow one proper-name/token, but reject phrase-level leakage.
+            if (latinWords >= 2 || latinLetters >= 14)
                 return true;
         }
 
@@ -377,6 +387,9 @@ public sealed partial class OllamaTranslationProvider : ITranslationProvider
 
     [GeneratedRegex(@"[\u3400-\u4DBF\u4E00-\u9FFF]{5,}")]
     private static partial Regex LongHanRunRegex();
+
+    [GeneratedRegex(@"[A-Za-z][A-Za-z'-]*")]
+    private static partial Regex LatinWordRegex();
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex WhitespaceRegex();
