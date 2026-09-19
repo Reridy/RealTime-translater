@@ -54,6 +54,16 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
         TranslationRequest request,
         CancellationToken cancellationToken)
     {
+        if (string.Equals(
+                request.TargetLanguage,
+                "ko",
+                StringComparison.OrdinalIgnoreCase) &&
+            LooksPrimarilyKorean(
+                request.Text))
+        {
+            return request.Text.Trim();
+        }
+
         var sourceLanguage = DetectSourceLanguage(
             request.Text,
             request.SourceLanguage);
@@ -683,6 +693,23 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
         }
 
         return "auto";
+    }
+
+    private static bool LooksPrimarilyKorean(
+        string text)
+    {
+        var hangul = text.Count(ch =>
+            ch is >= '\uAC00' and <= '\uD7A3' ||
+            ch is >= '\u3131' and <= '\u318E');
+
+        if (hangul < 3)
+            return false;
+
+        var latin = text.Count(ch =>
+            ch is >= 'A' and <= 'Z' ||
+            ch is >= 'a' and <= 'z');
+
+        return hangul >= latin * 2;
     }
 
     private static string LanguageName(
