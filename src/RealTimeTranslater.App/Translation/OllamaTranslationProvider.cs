@@ -1,12 +1,13 @@
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using RealTimeTranslater.Core.Translation;
 
 namespace RealTimeTranslater.App.Translation;
 
-public sealed class OllamaTranslationProvider : ITranslationProvider
+public sealed class OllamaTranslationProvider : IBatchTranslationProvider
 {
     private const int MaximumHttpAttempts = 3;
     private static readonly TimeSpan RequestTimeout =
@@ -104,6 +105,181 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
             throw new TimeoutException(
                 "Translation exceeded the 25 second realtime budget.");
         }
+        }
+        finally
+        {
+            _translationGate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<string>> TranslateBatchAsync(
+        IReadOnlyList<TranslationRequest> requests,
+        CancellationToken cancellationToken)
+    {
+        if (requests.Count == 0)
+            return Array.Empty<string>();
+
+        if (!IsTranslateGemmaModel(_model) ||
+            requests.Count == 1)
+        {
+            if (requests.Count == 1)
+            {
+                return new[]
+                {
+                    await TranslateAsync(
+                        requests[0],
+                        cancellationToken)
+                };
+            }
+
+            throw new NotSupportedException(
+                "Batch translation is currently optimized for TranslateGemma.");
+        }
+
+        await _translationGate.WaitAsync(
+            cancellationToken);
+
+        try
+        {
+            using var translationBudget =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken);
+
+            translationBudget.CancelAfter(
+                TimeSpan.FromSeconds(25));
+
+            var results =
+                new string[requests.Count];
+
+            var pending =
+                new List<(int Index, TranslationRequest Request, string SourceLanguage)>();
+
+            for (var i = 0; i < requests.Count; i++)
+            {
+                var request =
+                    requests[i];
+
+                if (string.Equals(
+                        request.TargetLanguage,
+                        "ko",
+                        StringComparison.OrdinalIgnoreCase) &&
+                    LooksPrimarilyKorean(
+                        request.Text))
+                {
+                    results[i] =
+                        request.Text.Trim();
+                    continue;
+                }
+
+                pending.Add((
+                    i,
+                    request,
+                    DetectSourceLanguage(
+                        request.Text,
+                        request.SourceLanguage)));
+            }
+
+            if (pending.Count == 0)
+                return results;
+
+            if (pending.Count == 1)
+            {
+                var item =
+                    pending[0];
+
+                results[item.Index] =
+                    await TranslateWithTranslateGemmaAsync(
+                        item.Request.Text,
+                        item.SourceLanguage,
+                        item.Request.TargetLanguage,
+                        translationBudget.Token);
+
+                return results;
+            }
+
+            Exception? lastError = null;
+
+            for (var attempt = 0;
+                 attempt < 2;
+                 attempt++)
+            {
+                try
+                {
+                    var translated =
+                        await RequestTranslateGemmaBatchAsync(
+                            pending
+                                .Select(item => (
+                                    item.Request.Text,
+                                    item.SourceLanguage))
+                                .ToArray(),
+                            requests[0].TargetLanguage,
+                            strict: attempt > 0,
+                            translationBudget.Token);
+
+                    if (translated.Count != pending.Count)
+                    {
+                        throw new InvalidOperationException(
+                            "TranslateGemma batch result count did not match request count.");
+                    }
+
+                    var allValid = true;
+
+                    for (var i = 0; i < pending.Count; i++)
+                    {
+                        var normalized =
+                            KoreanTranslationGuard.Normalize(
+                                translated[i]);
+
+                        if (!KoreanTranslationGuard.IsAcceptable(
+                                pending[i].Request.Text,
+                                normalized))
+                        {
+                            allValid = false;
+                            break;
+                        }
+
+                        results[pending[i].Index] =
+                            normalized;
+                    }
+
+                    if (allValid)
+                        return results;
+
+                    lastError =
+                        new InvalidOperationException(
+                            "TranslateGemma batch output failed Korean quality validation.");
+                }
+                catch (OperationCanceledException)
+                    when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                    when (ex is HttpRequestException or
+                        InvalidOperationException or
+                        TimeoutException)
+                {
+                    lastError = ex;
+                }
+
+                if (attempt == 0)
+                {
+                    await Task.Delay(
+                        80,
+                        translationBudget.Token);
+                }
+            }
+
+            throw new InvalidOperationException(
+                "TranslateGemma batch translation failed: " +
+                (lastError?.Message ?? "unknown error"),
+                lastError);
+        }
+        catch (OperationCanceledException)
+            when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                "Batch translation exceeded the 25 second realtime budget.");
         }
         finally
         {
@@ -285,6 +461,115 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
             strictError ?? primaryError);
     }
 
+    private async Task<IReadOnlyList<string>> RequestTranslateGemmaBatchAsync(
+        IReadOnlyList<(string Text, string SourceLanguage)> items,
+        string targetLanguage,
+        bool strict,
+        CancellationToken cancellationToken)
+    {
+        var targetName =
+            LanguageName(targetLanguage);
+
+        var prompt =
+            new StringBuilder();
+
+        prompt.Append(
+            strict
+                ? $"Translate every numbered item to {targetName}. Return only the JSON result. Do not omit, merge, explain, or continue any item.\n"
+                : $"Translate every numbered item to natural {targetName}. Preserve each item's meaning, tone, hesitation, and speaker wording. Return only the JSON result in the same order.\n");
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            prompt.Append(i + 1);
+            prompt.Append(". [");
+            prompt.Append(items[i].SourceLanguage);
+            prompt.Append("] ");
+            prompt.AppendLine(items[i].Text);
+        }
+
+        var totalSourceLength =
+            items.Sum(item => item.Text.Length);
+
+        var payload = new
+        {
+            model = _model,
+            stream = false,
+            keep_alive = "30m",
+            format = new
+            {
+                type = "object",
+                properties = new
+                {
+                    translations = new
+                    {
+                        type = "array",
+                        items = new
+                        {
+                            type = "string"
+                        },
+                        minItems = items.Count,
+                        maxItems = items.Count
+                    }
+                },
+                required = new[] { "translations" },
+                additionalProperties = false
+            },
+            options = new
+            {
+                temperature = 0.0,
+                num_ctx = 1024,
+                num_predict = Math.Clamp(
+                    (int)Math.Ceiling(totalSourceLength * 1.25) + 40,
+                    80,
+                    384),
+                repeat_penalty =
+                    strict ? 1.12 : 1.08
+            },
+            messages = new object[]
+            {
+                new
+                {
+                    role = "user",
+                    content = prompt.ToString()
+                }
+            }
+        };
+
+        var raw =
+            await SendChatAsync(
+                payload,
+                cancellationToken);
+
+        try
+        {
+            using var json =
+                JsonDocument.Parse(raw);
+
+            if (json.RootElement.ValueKind ==
+                    JsonValueKind.Object &&
+                json.RootElement.TryGetProperty(
+                    "translations",
+                    out var translations) &&
+                translations.ValueKind ==
+                    JsonValueKind.Array)
+            {
+                return translations
+                    .EnumerateArray()
+                    .Select(item =>
+                        item.ValueKind == JsonValueKind.String
+                            ? item.GetString() ?? string.Empty
+                            : string.Empty)
+                    .ToArray();
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        throw new InvalidOperationException(
+            "TranslateGemma batch response did not contain a translations array.");
+    }
+
     private async Task<string> RequestTranslateGemmaAsync(
         string sourceText,
         string sourceLanguage,
@@ -298,18 +583,9 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
             LanguageName(targetLanguage);
 
         var prompt = strict
-            ? $"Translate the following {sourceName} text into {targetName}. " +
-              $"Output only the {targetName} translation. Do not explain, " +
-              $"repeat the source, continue the dialogue, or mix another language.\n\n" +
+            ? $"Translate this {sourceName} text to {targetName}. Output only the complete {targetName} translation. Do not explain, repeat, continue, omit, or mix another language.\n\n" +
               sourceText
-            : $"You are a professional {sourceName} ({sourceLanguage}) to " +
-              $"{targetName} ({targetLanguage}) translator. " +
-              $"Accurately convey the meaning, tone, hesitation, negation, " +
-              $"speaker intent, and nuances of the original text while using " +
-              $"natural {targetName}. Do not invent or omit information.\n" +
-              $"Produce only the {targetName} translation, without any " +
-              $"additional explanations or commentary. Please translate the " +
-              $"following {sourceName} text into {targetName}:\n\n\n" +
+            : $"Translate {sourceName} to natural {targetName}. Preserve meaning, tone, hesitation, negation, and names. Output only the translation.\n\n" +
               sourceText;
 
         var payload = new
