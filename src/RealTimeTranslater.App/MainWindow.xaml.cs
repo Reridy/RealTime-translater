@@ -38,6 +38,16 @@ public partial class MainWindow : Window
         };
         OcrLanguageComboBox.SelectedItem = _settings.OcrLanguage;
 
+        TextSourceComboBox.ItemsSource = new[]
+        {
+            "OCR",
+            "Unity Adapter + OCR fallback"
+        };
+        TextSourceComboBox.SelectedItem =
+            TextSourceComboBox.Items.Contains(_settings.TextSource)
+                ? _settings.TextSource
+                : "OCR";
+
         ProviderComboBox.ItemsSource = new[]
         {
             "Mock",
@@ -105,6 +115,9 @@ public partial class MainWindow : Window
             };
 
             _settings.OcrLanguage = ocrLanguage;
+            _settings.TextSource =
+                TextSourceComboBox.SelectedItem?.ToString()
+                ?? "OCR";
             _settings.Overlay.Mode =
                 OverlayModeComboBox.SelectedItem?.ToString()
                 ?? "Replace";
@@ -130,7 +143,8 @@ public partial class MainWindow : Window
                 _overlayWindow,
                 _settings,
                 sourceLanguage,
-                _settings.Translation.TargetLanguage);
+                _settings.Translation.TargetLanguage,
+                _settings.TextSource);
 
             pipeline.StatusChanged += OnPipelineStatusChanged;
 
