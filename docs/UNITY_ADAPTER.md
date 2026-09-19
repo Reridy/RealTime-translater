@@ -172,11 +172,12 @@ Because this requires adapter-side geometry data, upgrading from adapter 0.2.x t
 Current realtime behavior is designed to avoid the most common intermittent-miss cases:
 
 - Ollama is warmed before the capture pipeline starts.
+- Ollama generations are serialized so cancelled/rapid line changes do not pile multiple local generations onto the model at once, reducing transient 500 errors and GPU contention.
 - Transient Ollama HTTP/network failures are retried internally with short backoff.
 - TranslateGemma gets a second stricter translation attempt if its first output fails Korean quality validation.
 - Unity text changes are sampled faster and held briefly for stability before translation, reducing typewriter/partial-line translations.
 - Proven dialogue/prose Unity text objects are learned during the session so later very short lines from the same object are not dropped by conservative heuristics.
 - If a translation fails, the same Unity line is retried quickly with increasing backoff instead of terminating the pipeline.
-- If the game advances while a translation is still running, the stale result is discarded instead of being flashed over the newer line.
+- Unity translation runs asynchronously from capture, so the app continues observing text changes while the model is generating. If the game advances, the obsolete request is cancelled and its stale result is discarded instead of being flashed over the newer line.
 - A short Unity adapter disconnect uses a reconnect grace period before OCR fallback, avoiding noisy fallback during momentary IPC interruptions.
 - The default desktop capture cadence is 8 FPS; OCR itself is still gated by frame-change/stability logic.
