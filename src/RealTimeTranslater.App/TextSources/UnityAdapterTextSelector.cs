@@ -108,7 +108,8 @@ internal static partial class UnityAdapterTextSelector
     internal static IReadOnlyList<UnityAdapterRegionDto> Select(
         UnityAdapterSnapshot snapshot,
         string overlayMode,
-        bool dialogueOnly)
+        bool dialogueOnly,
+        IReadOnlySet<string>? learnedTextObjects = null)
     {
         var sourceWidth = Math.Max(1, snapshot.Data.ScreenWidth);
         var sourceHeight = Math.Max(1, snapshot.Data.ScreenHeight);
@@ -139,7 +140,9 @@ internal static partial class UnityAdapterTextSelector
                 region,
                 sourceWidth,
                 sourceHeight,
-                hasVisibleSpeaker))
+                hasVisibleSpeaker,
+                learnedTextObjects?.Contains(
+                    GetObjectKey(region)) == true))
             .Where(candidate => candidate.IsCandidate)
             .OrderByDescending(candidate => candidate.Score)
             .ThenBy(candidate => candidate.Region.Y)
@@ -163,7 +166,8 @@ internal static partial class UnityAdapterTextSelector
         UnityAdapterRegionDto region,
         int screenWidth,
         int screenHeight,
-        bool hasVisibleSpeaker)
+        bool hasVisibleSpeaker,
+        bool isLearnedTextObject)
     {
         var text = region.Text.Trim();
         var lowered = text.ToLowerInvariant();
@@ -325,6 +329,11 @@ internal static partial class UnityAdapterTextSelector
             isChoice ||
             probableChoiceButton ||
             looksLikeProseBlock ||
+            (
+                isLearnedTextObject &&
+                !region.IsSelectable &&
+                !looksLikeShortHudLabel
+            ) ||
             (!region.IsSelectable &&
              (hasStrongDialogueHint ||
               looksLikeSentence ||
@@ -358,6 +367,9 @@ internal static partial class UnityAdapterTextSelector
 
         if (looksLikeShortDialogue)
             score += 55;
+
+        if (isLearnedTextObject)
+            score += 90;
 
         if (hasProseMetadataHint)
             score += 20;
@@ -432,6 +444,14 @@ internal static partial class UnityAdapterTextSelector
 
         return letters > 0 || japanese > 0;
     }
+
+    internal static string GetObjectKey(
+        UnityAdapterRegionDto region)
+        => string.Join(
+            "\u001f",
+            region.Hierarchy?.Trim() ?? string.Empty,
+            region.ObjectName?.Trim() ?? string.Empty,
+            region.Kind?.Trim() ?? string.Empty);
 
     private static string BuildDeduplicationKey(
         UnityAdapterRegionDto region)
