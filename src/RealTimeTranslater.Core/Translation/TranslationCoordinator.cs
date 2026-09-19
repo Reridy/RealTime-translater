@@ -26,51 +26,168 @@ public sealed class TranslationCoordinator
         CancellationToken cancellationToken,
         IReadOnlyList<string>? additionalContext = null)
     {
-        var result = new List<TranslatedRegion>(regions.Count);
+        var entries = regions
+            .Select((region, index) => new PendingRegion(
+                index,
+                region,
+                region.Text.Trim()))
+            .Where(entry => entry.Text.Length > 0)
+            .ToArray();
 
-        foreach (var region in regions)
+        if (entries.Length == 0)
+            return Array.Empty<TranslatedRegion>();
+
+        var translatedByIndex =
+            new Dictionary<int, string>();
+
+        var misses =
+            new List<PendingRegion>();
+
+        foreach (var entry in entries)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var text = region.Text.Trim();
-            if (text.Length == 0)
-                continue;
-
-            if (!_cache.TryGet(sourceLanguage, targetLanguage, text, out var translated))
+            if (_cache.TryGet(
+                    sourceLanguage,
+                    targetLanguage,
+                    entry.Text,
+                    out var cached))
             {
-                var requestContext =
-                    additionalContext is null ||
-                    additionalContext.Count == 0
-                        ? _context.ToArray()
-                        : _context
-                            .Concat(additionalContext)
-                            .ToArray();
+                translatedByIndex[entry.Index] =
+                    cached;
+            }
+            else
+            {
+                misses.Add(entry);
+            }
+        }
 
-                translated = await _provider.TranslateAsync(
+        if (misses.Count > 1 &&
+            _provider is IBatchTranslationProvider batchProvider)
+        {
+            var requestContext = BuildRequestContext(
+                additionalContext);
+
+            var requests = misses
+                .Select(entry => new TranslationRequest(
+                    entry.Text,
+                    sourceLanguage,
+                    targetLanguage,
+                    requestContext))
+                .ToArray();
+
+            try
+            {
+                var batch =
+                    await batchProvider.TranslateBatchAsync(
+                        requests,
+                        cancellationToken);
+
+                if (batch.Count != misses.Count)
+                {
+                    throw new InvalidOperationException(
+                        "Batch translation result count did not match request count.");
+                }
+
+                for (var i = 0; i < misses.Count; i++)
+                {
+                    var translated =
+                        batch[i].Trim();
+
+                    if (translated.Length == 0)
+                        translated = misses[i].Text;
+
+                    translatedByIndex[
+                        misses[i].Index] =
+                        translated;
+
+                    _cache.Set(
+                        sourceLanguage,
+                        targetLanguage,
+                        misses[i].Text,
+                        translated);
+                }
+
+                misses.Clear();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // Batch mode is an optimization. Fall back to the existing
+                // single-line path if the local model cannot follow the batch
+                // format reliably.
+            }
+        }
+
+        foreach (var entry in misses)
+        {
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            var requestContext =
+                BuildRequestContext(
+                    additionalContext);
+
+            var translated =
+                await _provider.TranslateAsync(
                     new TranslationRequest(
-                        text,
+                        entry.Text,
                         sourceLanguage,
                         targetLanguage,
                         requestContext),
                     cancellationToken);
 
-                translated = translated.Trim();
-                if (translated.Length == 0)
-                    translated = text;
+            translated = translated.Trim();
 
-                _cache.Set(sourceLanguage, targetLanguage, text, translated);
-            }
+            if (translated.Length == 0)
+                translated = entry.Text;
 
-            result.Add(new TranslatedRegion(
-                text,
-                translated,
-                region.Bounds,
-                region.Confidence));
+            translatedByIndex[entry.Index] =
+                translated;
 
-            Remember($"{text} => {translated}");
+            _cache.Set(
+                sourceLanguage,
+                targetLanguage,
+                entry.Text,
+                translated);
+        }
+
+        var result =
+            new List<TranslatedRegion>(
+                entries.Length);
+
+        foreach (var entry in entries)
+        {
+            var translated =
+                translatedByIndex[entry.Index];
+
+            result.Add(
+                new TranslatedRegion(
+                    entry.Text,
+                    translated,
+                    entry.Region.Bounds,
+                    entry.Region.Confidence));
+
+            Remember(
+                $"{entry.Text} => {translated}");
         }
 
         return result;
+    }
+
+    private IReadOnlyList<string> BuildRequestContext(
+        IReadOnlyList<string>? additionalContext)
+    {
+        if (additionalContext is null ||
+            additionalContext.Count == 0)
+        {
+            return _context.ToArray();
+        }
+
+        return _context
+            .Concat(additionalContext)
+            .ToArray();
     }
 
     private void Remember(string line)
@@ -79,7 +196,13 @@ public sealed class TranslationCoordinator
             return;
 
         _context.Enqueue(line);
+
         while (_context.Count > _contextLimit)
             _context.Dequeue();
     }
+
+    private sealed record PendingRegion(
+        int Index,
+        TextRegion Region,
+        string Text);
 }
