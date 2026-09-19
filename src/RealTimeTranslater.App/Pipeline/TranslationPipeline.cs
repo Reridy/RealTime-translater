@@ -3,6 +3,8 @@ using RealTimeTranslater.App.Capture;
 using RealTimeTranslater.App.Configuration;
 using RealTimeTranslater.App.Ocr;
 using RealTimeTranslater.App.Overlay;
+using RealTimeTranslater.App.TextSources;
+using RealTimeTranslater.Core.Models;
 using RealTimeTranslater.Core.Ocr;
 using RealTimeTranslater.Core.Translation;
 
@@ -20,6 +22,12 @@ public sealed class TranslationPipeline : IDisposable
     private readonly AppSettings _settings;
     private readonly string _sourceLanguage;
     private readonly string _targetLanguage;
+    private readonly string _textSourceMode;
+    private readonly UnityAdapterReceiver _unityAdapterReceiver = new();
+
+    private long _lastUnityVersion = -1;
+    private IReadOnlyList<TranslatedRegion> _lastUnityTranslations =
+        Array.Empty<TranslatedRegion>();
 
     public TranslationPipeline(
         IntPtr targetWindow,
@@ -28,7 +36,8 @@ public sealed class TranslationPipeline : IDisposable
         OverlayWindow overlay,
         AppSettings settings,
         string sourceLanguage,
-        string targetLanguage)
+        string targetLanguage,
+        string textSourceMode)
     {
         _targetWindow = targetWindow;
         _ocr = ocr;
@@ -36,6 +45,7 @@ public sealed class TranslationPipeline : IDisposable
         _settings = settings;
         _sourceLanguage = sourceLanguage;
         _targetLanguage = targetLanguage;
+        _textSourceMode = textSourceMode;
 
         _capture = new WindowCaptureService();
         _changeDetector = new FrameChangeDetector(settings.ChangeThreshold);
@@ -53,10 +63,20 @@ public sealed class TranslationPipeline : IDisposable
             1000.0 / Math.Clamp(_settings.CaptureFps, 1, 30));
 
         var forcedOcrFrames = 0;
+        var useUnityAdapter = string.Equals(
+            _textSourceMode,
+            "Unity Adapter + OCR fallback",
+            StringComparison.OrdinalIgnoreCase);
+
+        var unityReceiverTask = useUnityAdapter
+            ? _unityAdapterReceiver.RunAsync(cancellationToken)
+            : Task.CompletedTask;
 
         StatusChanged?.Invoke("Running");
 
-        while (!cancellationToken.IsCancellationRequested)
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
         {
             var loopStart = Stopwatch.GetTimestamp();
 
@@ -69,6 +89,58 @@ public sealed class TranslationPipeline : IDisposable
                     $"Running · {_capture.BackendName} · waiting for target frame...");
                 await DelayRemaining(loopStart, frameInterval, cancellationToken);
                 continue;
+            }
+
+            if (useUnityAdapter &&
+                _unityAdapterReceiver.TryGetLatest(
+                    TimeSpan.FromSeconds(2),
+                    out var unitySnapshot))
+            {
+                var unityRegions = UnityAdapterRegionMapper.Map(
+                    unitySnapshot,
+                    frame);
+
+                if (unityRegions.Count > 0)
+                {
+                    if (unitySnapshot.Version != _lastUnityVersion ||
+                        _lastUnityTranslations.Count != unityRegions.Count)
+                    {
+                        _lastUnityTranslations =
+                            await _translator.TranslateAsync(
+                                unityRegions,
+                                _sourceLanguage,
+                                _targetLanguage,
+                                cancellationToken);
+
+                        _lastUnityVersion = unitySnapshot.Version;
+                    }
+                    else
+                    {
+                        _lastUnityTranslations =
+                            _lastUnityTranslations
+                                .Select((translated, index) =>
+                                    translated with
+                                    {
+                                        Bounds = unityRegions[index].Bounds
+                                    })
+                                .ToArray();
+                    }
+
+                    await _overlay.Dispatcher.InvokeAsync(() =>
+                        _overlay.Render(
+                            _lastUnityTranslations,
+                            frame.ScreenBounds,
+                            frame.DpiScale));
+
+                    StatusChanged?.Invoke(
+                        $"Running · {_capture.BackendName} · Unity Adapter {_lastUnityTranslations.Count} text region(s)");
+
+                    await DelayRemaining(
+                        loopStart,
+                        frameInterval,
+                        cancellationToken);
+                    continue;
+                }
             }
 
             var changed = _changeDetector.HasSignificantChange(frame.Bitmap);
@@ -102,17 +174,40 @@ public sealed class TranslationPipeline : IDisposable
                             ? string.Empty
                             : " · WGC unavailable, using GDI";
 
+                    var adapterNote = useUnityAdapter
+                        ? " · Unity Adapter waiting, OCR fallback"
+                        : string.Empty;
+
                     StatusChanged?.Invoke(
-                        $"Running · {_capture.BackendName}{fallbackNote} · OCR {stableRegions.Count} line(s) · overlay {translated.Count} line(s)");
+                        $"Running · {_capture.BackendName}{fallbackNote}{adapterNote} · OCR {stableRegions.Count} line(s) · overlay {translated.Count} line(s)");
                 }
                 else
                 {
+                    var adapterNote = useUnityAdapter
+                        ? " · Unity Adapter waiting, OCR fallback"
+                        : string.Empty;
+
                     StatusChanged?.Invoke(
-                        $"Running · {_capture.BackendName} · stabilizing OCR ({regions.Count} line(s))");
+                        $"Running · {_capture.BackendName}{adapterNote} · stabilizing OCR ({regions.Count} line(s))");
                 }
             }
 
             await DelayRemaining(loopStart, frameInterval, cancellationToken);
+            }
+        }
+        finally
+        {
+            if (useUnityAdapter)
+            {
+                try
+                {
+                    await unityReceiverTask;
+                }
+                catch (OperationCanceledException)
+                    when (cancellationToken.IsCancellationRequested)
+                {
+                }
+            }
         }
     }
 
