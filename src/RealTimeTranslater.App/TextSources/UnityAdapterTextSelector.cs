@@ -218,6 +218,12 @@ internal static partial class UnityAdapterTextSelector
         var hasSentenceEnding =
             SentenceEndingRegex().IsMatch(text);
 
+        var hasSpeakerPrefix =
+            SpeakerPrefixedDialogueRegex().IsMatch(text);
+
+        var looksQuotedDialogue =
+            QuotedDialogueRegex().IsMatch(text);
+
         var hasJapaneseSentencePunctuation =
             JapaneseSentencePunctuationRegex().IsMatch(text);
 
@@ -243,6 +249,8 @@ internal static partial class UnityAdapterTextSelector
             (
                 hasSentenceEnding ||
                 hasJapaneseSentencePunctuation ||
+                hasSpeakerPrefix ||
+                looksQuotedDialogue ||
                 (words >= 5 && text.Length >= 24) ||
                 (japaneseCount >= 8 && text.Length >= 16)
             );
@@ -290,8 +298,26 @@ internal static partial class UnityAdapterTextSelector
             text.Length >= 20 &&
             (
                 looksLikeSentence ||
+                hasSpeakerPrefix ||
+                looksQuotedDialogue ||
                 words >= 5 ||
                 japaneseCount >= 6
+            );
+
+        var looksLikeCinematicCaption =
+            !isNavigationControl &&
+            !hasSpeakerHint &&
+            !looksLikeShortHudLabel &&
+            region.Y >= screenHeight * 0.42 &&
+            region.Width >= screenWidth * 0.20 &&
+            text.Length >= 8 &&
+            (
+                hasSpeakerPrefix ||
+                looksQuotedDialogue ||
+                (
+                    words >= 4 &&
+                    SentencePunctuationRegex().IsMatch(text)
+                )
             );
 
         var labelLineCount =
@@ -369,7 +395,8 @@ internal static partial class UnityAdapterTextSelector
 
         if (looksStructuredUi &&
             !isChoice &&
-            !looksLikeProseBlock)
+            !looksLikeProseBlock &&
+            !looksLikeCinematicCaption)
         {
             return Reject(region);
         }
@@ -382,6 +409,7 @@ internal static partial class UnityAdapterTextSelector
         var isCandidate =
             isChoice ||
             probableChoiceButton ||
+            looksLikeCinematicCaption ||
             looksLikeWideNarrativeSelectable ||
             looksLikeProseBlock ||
             (
@@ -429,6 +457,15 @@ internal static partial class UnityAdapterTextSelector
 
         if (looksLikeWideNarrativeSelectable)
             score += 85;
+
+        if (looksLikeCinematicCaption)
+            score += 110;
+
+        if (hasSpeakerPrefix)
+            score += 120;
+
+        if (looksQuotedDialogue)
+            score += 65;
 
         if (isLearnedTextObject)
             score += 90;
