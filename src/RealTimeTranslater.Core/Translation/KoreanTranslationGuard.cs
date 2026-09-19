@@ -27,14 +27,20 @@ public static partial class KoreanTranslationGuard
         string source,
         string candidate)
     {
+        var rawCandidate = candidate;
+
+        if (RoleLeakRegex().IsMatch(rawCandidate) ||
+            MetaInstructionRegex().IsMatch(rawCandidate))
+        {
+            return false;
+        }
+
         candidate = Normalize(candidate);
 
         if (candidate.Length == 0)
             return false;
 
-        if (RoleLeakRegex().IsMatch(candidate) ||
-            MetaInstructionRegex().IsMatch(candidate) ||
-            ReplacementCharacterRegex().IsMatch(candidate) ||
+        if (ReplacementCharacterRegex().IsMatch(candidate) ||
             SuspiciousQuestionMarksRegex().IsMatch(candidate) ||
             HasRunawayRepetition(candidate))
         {
