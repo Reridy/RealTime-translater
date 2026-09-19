@@ -12,6 +12,7 @@ Implemented on the feature/mvp-realtime-translation branch:
 - Capture the selected window with Windows Graphics Capture, with automatic GDI fallback if WGC cannot initialize.
 - Ignore mostly unchanged frames using a lightweight frame-difference detector.
 - OCR text lines with Tesseract 5.
+- Optional read-only Unity/BepInEx text adapter that can feed exact visible TMP_Text / Unity UI strings to the translation pipeline, with automatic OCR fallback.
 - Stabilize OCR over multiple frames before translating.
 - Cache translations to avoid repeat network/model calls.
 - Translate through Ollama, LibreTranslate, or a built-in mock provider.
@@ -57,5 +58,7 @@ This is an MVP, not yet a universal game translator.
 - Replace mode currently uses a semi-transparent background rectangle instead of reconstructing the underlying game texture.
 - Anti-cheat protected games may behave differently. The app does not inject into the game process or read game memory.
 - OCR is full-window in this MVP; configurable regions and automatic text detection are planned.
+
+For the Unity/BepInEx proof-of-concept adapter, see docs/UNITY_ADAPTER.md.
 
 See docs/ARCHITECTURE.md and docs/ROADMAP.md for the design and next implementation phases.
