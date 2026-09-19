@@ -21,6 +21,9 @@
     "FontSizeScale": 0.82,
     "MinimumFontSize": 12.0,
     "MaximumFontSize": 38.0,
+    "SubtitleBackgroundOpacity": 0.58,
+    "SubtitleMaxWidthRatio": 0.74,
+    "SubtitleBottomMargin": 18.0,
     "AllowScreenshots": false
   }
 }
