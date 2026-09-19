@@ -34,6 +34,38 @@ public sealed class TranslationCoordinatorTests
         Assert.Equal("translated:hello", second[0].TranslatedText);
     }
 
+
+    [Fact]
+    public async Task ReusesCacheAcrossWhitespaceOnlyChanges()
+    {
+        var provider = new CountingProvider();
+        var coordinator = new TranslationCoordinator(provider);
+
+        await coordinator.TranslateAsync(
+            new[]
+            {
+                new TextRegion(
+                    "Hello   world",
+                    new PixelRect(0, 0, 100, 20))
+            },
+            "en",
+            "ko",
+            CancellationToken.None);
+
+        await coordinator.TranslateAsync(
+            new[]
+            {
+                new TextRegion(
+                    "Hello\nworld",
+                    new PixelRect(0, 0, 100, 20))
+            },
+            "en",
+            "ko",
+            CancellationToken.None);
+
+        Assert.Equal(1, provider.CallCount);
+    }
+
     [Fact]
     public async Task PassesRecentDialogueAsContext()
     {
