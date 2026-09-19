@@ -34,6 +34,9 @@ public sealed class TranslationPipeline : IDisposable
         DateTimeOffset.MinValue;
     private string? _lastUnityTranslationError;
     private int _unityFailureCount;
+    private string _pendingUnityTextKey = string.Empty;
+    private DateTimeOffset _pendingUnityTextSince =
+        DateTimeOffset.MinValue;
 
     public TranslationPipeline(
         IntPtr targetWindow,
@@ -122,6 +125,54 @@ public sealed class TranslationPipeline : IDisposable
                     var unityTextKey = string.Join(
                         "\u001e",
                         unityRegions.Select(region => region.Text));
+
+                    var now =
+                        DateTimeOffset.UtcNow;
+
+                    if (!string.Equals(
+                            unityTextKey,
+                            _pendingUnityTextKey,
+                            StringComparison.Ordinal))
+                    {
+                        _pendingUnityTextKey =
+                            unityTextKey;
+                        _pendingUnityTextSince =
+                            now;
+
+                        if (!string.Equals(
+                                _lastUnityTextKey,
+                                unityTextKey,
+                                StringComparison.Ordinal))
+                        {
+                            _lastUnityTranslations =
+                                Array.Empty<TranslatedRegion>();
+                            _lastUnityTextKey =
+                                string.Empty;
+                        }
+                    }
+
+                    var textStable =
+                        now -
+                        _pendingUnityTextSince >=
+                        TimeSpan.FromMilliseconds(110);
+
+                    if (!textStable)
+                    {
+                        await _overlay.Dispatcher.InvokeAsync(() =>
+                            _overlay.Render(
+                                Array.Empty<TranslatedRegion>(),
+                                frame.ScreenBounds,
+                                frame.DpiScale));
+
+                        StatusChanged?.Invoke(
+                            $"Running · {_capture.BackendName} · Unity Adapter stabilizing text · {unityRegions.Count}/{unitySnapshot.Data.Regions.Count} selected text region(s)");
+
+                        await DelayRemaining(
+                            loopStart,
+                            frameInterval,
+                            cancellationToken);
+                        continue;
+                    }
 
                     var retryCoolingDown =
                         string.Equals(
@@ -268,6 +319,9 @@ public sealed class TranslationPipeline : IDisposable
                     _lastUnityTranslationMilliseconds = null;
                     _lastUnityTranslationError = null;
                     _unityFailureCount = 0;
+                    _pendingUnityTextKey = string.Empty;
+                    _pendingUnityTextSince =
+                        DateTimeOffset.MinValue;
                 }
 
                 await _overlay.Dispatcher.InvokeAsync(() =>
