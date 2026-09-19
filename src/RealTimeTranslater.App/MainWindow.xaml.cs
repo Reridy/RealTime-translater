@@ -136,6 +136,28 @@ public partial class MainWindow : Window
 
             var provider = CreateTranslationProvider(providerName);
 
+            if (provider is OllamaTranslationProvider ollama)
+            {
+                StatusTextBlock.Text =
+                    "Warming Ollama model...";
+
+                try
+                {
+                    using var warmupTimeout =
+                        new CancellationTokenSource(
+                            TimeSpan.FromSeconds(30));
+
+                    await ollama.WarmupAsync(
+                        warmupTimeout.Token);
+                }
+                catch (Exception ex)
+                {
+                    StatusTextBlock.Text =
+                        "Ollama warmup warning: " +
+                        ex.Message;
+                }
+            }
+
             _overlayWindow = new OverlayWindow(_settings.Overlay);
             _overlayWindow.Show();
 
