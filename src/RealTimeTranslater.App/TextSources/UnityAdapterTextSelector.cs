@@ -673,6 +673,12 @@ internal static partial class UnityAdapterTextSelector
     [GeneratedRegex(@"(?m)^\s*[\p{L}\p{N} _-]{2,24}:")]
     private static partial Regex LabelLineRegex();
 
+    [GeneratedRegex("^\\s*[\\p{L}\\p{N}][\\p{L}\\p{N} ._'’-]{0,28}:\\s*[\\\"“‘']?.{3,}")]
+    private static partial Regex SpeakerPrefixedDialogueRegex();
+
+    [GeneratedRegex("^\\s*[\\\"“‘'][^\\\"”’']{4,}[\\\"”’']\\s*$")]
+    private static partial Regex QuotedDialogueRegex();
+
     [GeneratedRegex(@"(?m)^\s*[-•*]\s+")]
     private static partial Regex BulletLineRegex();
 
