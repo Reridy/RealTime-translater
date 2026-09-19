@@ -53,6 +53,12 @@ public sealed class KoreanTranslationGuardTests
     [InlineData(
         "I see, amnesia can also have this kind of problem.",
         "I see, amnesia can also have this kind of problem.")]
+    [InlineData(
+        "This is a long paragraph explaining several details about the character, her habits, her history, and what happened during the event in a way that should not be cut off halfway.",
+        "이 문단은 중간에서 잘렸어요.")]
+    [InlineData(
+        "Press the button.",
+        "ABC를 누르세요.")]
     public void RejectsLeakedOrMalformedOutput(
         string source,
         string candidate)
