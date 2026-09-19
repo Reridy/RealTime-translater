@@ -1,17 +1,13 @@
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using RealTimeTranslater.Core.Translation;
 
 namespace RealTimeTranslater.App.Translation;
 
-public sealed partial class OllamaTranslationProvider : ITranslationProvider
+public sealed class OllamaTranslationProvider : ITranslationProvider
 {
-    private const int MaximumContextLines = 1;
-    private const int MaximumContextCharacters = 520;
-
     private readonly HttpClient _httpClient;
     private readonly string _endpoint;
     private readonly string _model;
@@ -37,145 +33,314 @@ public sealed partial class OllamaTranslationProvider : ITranslationProvider
         TranslationRequest request,
         CancellationToken cancellationToken)
     {
-        var context = BuildContext(request.Context);
+        var sourceLanguage = DetectSourceLanguage(
+            request.Text,
+            request.SourceLanguage);
 
-        var first = await RequestTranslationAsync(
-            request,
-            context,
-            strictRetry: false,
-            cancellationToken);
+        if (IsTranslateGemmaModel(_model))
+        {
+            var dedicated = await RequestTranslateGemmaAsync(
+                request.Text,
+                sourceLanguage,
+                request.TargetLanguage,
+                cancellationToken);
 
-        var normalized = NormalizeTranslation(first);
+            dedicated = KoreanTranslationGuard.Normalize(dedicated);
 
-        if (!IsSuspiciousTranslation(request.Text, normalized))
-            return normalized;
+            if (KoreanTranslationGuard.IsAcceptable(
+                    request.Text,
+                    dedicated))
+            {
+                return dedicated;
+            }
 
-        // Bad local-model generations can occasionally leak role labels,
-        // Chinese meta text, or repeat a phrase until the token budget ends.
-        // Retry once with no history, lower temperature, and a tighter budget.
-        var retry = await RequestTranslationAsync(
-            request,
-            "(none)",
-            strictRetry: true,
-            cancellationToken);
+            throw new InvalidOperationException(
+                "TranslateGemma returned a malformed Korean translation.");
+        }
 
-        normalized = NormalizeTranslation(retry);
+        var speakerContext = BuildSpeakerContext(request.Context);
 
-        if (!IsSuspiciousTranslation(request.Text, normalized))
-            return normalized;
+        string? primary = null;
+        Exception? primaryError = null;
 
-        // Never paint runaway model garbage over the game. If even the strict
-        // retry is malformed, recover the cleanest Korean sentence we can.
-        var recovered = RecoverKoreanSentence(normalized);
-        if (!string.IsNullOrWhiteSpace(recovered))
-            return recovered;
+        try
+        {
+            primary = await RequestGeneralModelAsync(
+                request.Text,
+                sourceLanguage,
+                request.TargetLanguage,
+                speakerContext,
+                structuredOutput: true,
+                strict: false,
+                cancellationToken);
+        }
+        catch (Exception ex)
+            when (ex is HttpRequestException or InvalidOperationException)
+        {
+            primaryError = ex;
+        }
 
-        // Last-resort fail-safe: keep the original readable rather than
-        // flooding the overlay with malformed generated text.
-        return request.Text;
+        if (!string.IsNullOrWhiteSpace(primary))
+        {
+            primary = KoreanTranslationGuard.Normalize(primary);
+
+            if (KoreanTranslationGuard.IsAcceptable(
+                    request.Text,
+                    primary))
+            {
+                return primary;
+            }
+        }
+
+        // Structured decoding can fail on some local Ollama/model
+        // combinations. Retry once with a minimal plain-text request and no
+        // dialogue history so a bad generation cannot poison the next line.
+        if (primaryError is HttpRequestException httpError &&
+            IsTransient(httpError.StatusCode))
+        {
+            await Task.Delay(250, cancellationToken);
+        }
+
+        string? strict = null;
+        Exception? strictError = null;
+
+        try
+        {
+            strict = await RequestGeneralModelAsync(
+                request.Text,
+                sourceLanguage,
+                request.TargetLanguage,
+                speakerContext: string.Empty,
+                structuredOutput: false,
+                strict: true,
+                cancellationToken);
+        }
+        catch (Exception ex)
+            when (ex is HttpRequestException or InvalidOperationException)
+        {
+            strictError = ex;
+        }
+
+        if (!string.IsNullOrWhiteSpace(strict))
+        {
+            strict = KoreanTranslationGuard.Normalize(strict);
+
+            if (KoreanTranslationGuard.IsAcceptable(
+                    request.Text,
+                    strict))
+            {
+                return strict;
+            }
+
+            var recovered =
+                KoreanTranslationGuard.RecoverBestKoreanLine(strict);
+
+            if (!string.IsNullOrWhiteSpace(recovered) &&
+                KoreanTranslationGuard.IsAcceptable(
+                    request.Text,
+                    recovered))
+            {
+                return recovered;
+            }
+        }
+
+        var error =
+            strictError?.Message ??
+            primaryError?.Message ??
+            "The model returned malformed translation output.";
+
+        throw new InvalidOperationException(
+            $"Ollama translation failed after validation/retry: {error}",
+            strictError ?? primaryError);
     }
 
-    private async Task<string> RequestTranslationAsync(
-        TranslationRequest request,
-        string context,
-        bool strictRetry,
+    private async Task<string> RequestTranslateGemmaAsync(
+        string sourceText,
+        string sourceLanguage,
+        string targetLanguage,
         CancellationToken cancellationToken)
     {
-        var outputBudget = strictRetry
-            ? Math.Clamp(request.Text.Length + 40, 64, 128)
-            : Math.Clamp(request.Text.Length * 2 + 36, 72, 160);
+        var sourceName = LanguageName(sourceLanguage);
+        var targetName = LanguageName(targetLanguage);
 
-        var systemPrompt =
-            "You are a Korean game localization translator. " +
-            "Translate ONLY the source text into natural Korean. " +
-            "Preserve the exact meaning: negation, subject/object relations, chronology, emotion, hesitation, emphasis, jokes, and character tone. " +
-            "Treat stutters/hesitation literally; for example, a source like 'N-no' should remain a hesitant refusal such as '아-아니요', not become an apology. " +
-            "Do not invent or omit information. " +
-            "Use fluent spoken Korean for dialogue and concise standard Korean for UI. " +
-            "Keep proper names consistent and preserve numbers/placeholders/control tokens. " +
-            "Do not output Chinese. Do not output role labels, explanations, notes, alternatives, or commentary. " +
-            "Return exactly one JSON object: {\"translation\":\"...\"}.";
-
-        if (strictRetry)
-        {
-            systemPrompt +=
-                " Correction retry: ignore all previous context, translate the source once, and stop immediately after the JSON object.";
-        }
+        var prompt =
+            $"You are a professional {sourceName} ({sourceLanguage}) to " +
+            $"{targetName} ({targetLanguage}) translator. " +
+            $"Your goal is to accurately convey the meaning and nuances of " +
+            $"the original {sourceName} text while adhering to " +
+            $"{targetName} grammar, vocabulary, and cultural sensitivities.\n" +
+            $"Produce only the {targetName} translation, without any " +
+            $"additional explanations or commentary. Please translate the " +
+            $"following {sourceName} text into {targetName}:\n\n\n" +
+            sourceText;
 
         var payload = new
         {
             model = _model,
             stream = false,
             keep_alive = "30m",
-            format = "json",
             options = new
             {
-                temperature = strictRetry ? 0.0 : 0.08,
-                top_p = 0.8,
+                temperature = 0.0,
                 num_ctx = 1024,
-                num_predict = outputBudget,
-                repeat_penalty = 1.12
+                num_predict = OutputBudget(sourceText, 144),
+                repeat_penalty = 1.08
             },
             messages = new object[]
             {
                 new
                 {
-                    role = "system",
-                    content = systemPrompt
-                },
-                new
-                {
                     role = "user",
-                    content =
-                        $"Source language: {request.SourceLanguage}\n" +
-                        $"Target language: {request.TargetLanguage}\n" +
-                        $"Context (reference only, never repeat): {context}\n" +
-                        "SOURCE:\n" +
-                        request.Text
+                    content = prompt
                 }
             }
         };
 
-        using var response = await _httpClient.PostAsJsonAsync(
-            $"{_endpoint}/api/chat",
+        return await SendChatAsync(
+            payload,
+            cancellationToken);
+    }
+
+    private async Task<string> RequestGeneralModelAsync(
+        string sourceText,
+        string sourceLanguage,
+        string targetLanguage,
+        string speakerContext,
+        bool structuredOutput,
+        bool strict,
+        CancellationToken cancellationToken)
+    {
+        var systemPrompt =
+            "You are a Korean game localization translator. " +
+            "Translate ONLY the SOURCE text into natural Korean. " +
+            "Preserve meaning exactly: negation, subject/object relations, " +
+            "chronology, emotion, hesitation, emphasis, jokes, and tone. " +
+            "Never invent, omit, continue, explain, or answer the dialogue. " +
+            "For stutters, preserve hesitation: for example 'N-no' means " +
+            "'아-아니요', not an apology. " +
+            "Output Korean only except unavoidable proper names or short " +
+            "game abbreviations already present in SOURCE.";
+
+        if (structuredOutput)
+        {
+            systemPrompt +=
+                " Return exactly one JSON object with one string field named " +
+                "translation and nothing else.";
+        }
+        else
+        {
+            systemPrompt +=
+                " Return only the Korean translation and stop immediately.";
+        }
+
+        if (strict)
+        {
+            systemPrompt +=
+                " This is a correction retry. Ignore all prior conversation " +
+                "and do not include any English or Chinese phrase.";
+        }
+
+        var userText =
+            $"Source language: {sourceLanguage}\n" +
+            $"Target language: {targetLanguage}\n";
+
+        if (!string.IsNullOrWhiteSpace(speakerContext))
+        {
+            userText +=
+                $"Speaker context: {speakerContext}\n";
+        }
+
+        userText +=
+            "SOURCE BEGIN\n" +
+            sourceText +
+            "\nSOURCE END";
+
+        object payload;
+
+        if (structuredOutput)
+        {
+            payload = new
+            {
+                model = _model,
+                stream = false,
+                keep_alive = "30m",
+                format = new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        translation = new
+                        {
+                            type = "string"
+                        }
+                    },
+                    required = new[] { "translation" },
+                    additionalProperties = false
+                },
+                options = new
+                {
+                    temperature = 0.0,
+                    top_p = 0.85,
+                    num_ctx = 1024,
+                    num_predict = OutputBudget(sourceText, 144),
+                    repeat_penalty = 1.10
+                },
+                messages = new object[]
+                {
+                    new
+                    {
+                        role = "system",
+                        content = systemPrompt
+                    },
+                    new
+                    {
+                        role = "user",
+                        content = userText
+                    }
+                }
+            };
+        }
+        else
+        {
+            payload = new
+            {
+                model = _model,
+                stream = false,
+                keep_alive = "30m",
+                options = new
+                {
+                    temperature = 0.0,
+                    top_p = 0.8,
+                    num_ctx = 768,
+                    num_predict = OutputBudget(sourceText, 112),
+                    repeat_penalty = 1.14
+                },
+                messages = new object[]
+                {
+                    new
+                    {
+                        role = "system",
+                        content = systemPrompt
+                    },
+                    new
+                    {
+                        role = "user",
+                        content = userText
+                    }
+                }
+            };
+        }
+
+        var raw = await SendChatAsync(
             payload,
             cancellationToken);
 
-        response.EnsureSuccessStatusCode();
+        if (!structuredOutput)
+            return raw;
 
-        using var document = await JsonDocument.ParseAsync(
-            await response.Content.ReadAsStreamAsync(cancellationToken),
-            cancellationToken: cancellationToken);
-
-        if (!document.RootElement.TryGetProperty("message", out var message) ||
-            !message.TryGetProperty("content", out var content))
-        {
-            throw new InvalidOperationException(
-                "Ollama response did not contain message.content.");
-        }
-
-        var rawContent = content.GetString()?.Trim();
-        if (string.IsNullOrWhiteSpace(rawContent))
-        {
-            throw new InvalidOperationException(
-                "Ollama returned an empty translation.");
-        }
-
-        var translated = ParseStructuredTranslation(rawContent);
-        if (string.IsNullOrWhiteSpace(translated))
-        {
-            throw new InvalidOperationException(
-                "Ollama JSON response did not contain a translation.");
-        }
-
-        return translated;
-    }
-
-    private static string ParseStructuredTranslation(string rawContent)
-    {
         try
         {
-            using var json = JsonDocument.Parse(rawContent);
+            using var json = JsonDocument.Parse(raw);
 
             if (json.RootElement.ValueKind == JsonValueKind.Object &&
                 json.RootElement.TryGetProperty(
@@ -190,213 +355,156 @@ public sealed partial class OllamaTranslationProvider : ITranslationProvider
         {
         }
 
-        var match = JsonObjectRegex().Match(rawContent);
-        if (!match.Success)
-            return string.Empty;
+        throw new InvalidOperationException(
+            "Ollama structured response did not contain translation.");
+    }
 
+    private async Task<string> SendChatAsync(
+        object payload,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            $"{_endpoint}/api/chat",
+            payload,
+            cancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(
+            cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var detail = TryReadOllamaError(body);
+
+            throw new HttpRequestException(
+                $"Ollama {(int)response.StatusCode} " +
+                $"{response.ReasonPhrase}: {detail}",
+                inner: null,
+                response.StatusCode);
+        }
+
+        using var document = JsonDocument.Parse(body);
+
+        if (document.RootElement.TryGetProperty(
+                "message",
+                out var message) &&
+            message.TryGetProperty(
+                "content",
+                out var content))
+        {
+            var value = content.GetString()?.Trim();
+
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        if (document.RootElement.TryGetProperty(
+                "error",
+                out var error))
+        {
+            throw new InvalidOperationException(
+                $"Ollama generation error: {error.GetString()}");
+        }
+
+        throw new InvalidOperationException(
+            "Ollama response did not contain message.content.");
+    }
+
+    private static string TryReadOllamaError(string body)
+    {
         try
         {
-            using var json = JsonDocument.Parse(match.Value);
+            using var json = JsonDocument.Parse(body);
 
             if (json.RootElement.TryGetProperty(
-                    "translation",
-                    out var translation) &&
-                translation.ValueKind == JsonValueKind.String)
+                    "error",
+                    out var error))
             {
-                return translation.GetString() ?? string.Empty;
+                return error.ValueKind == JsonValueKind.String
+                    ? error.GetString() ?? "unknown error"
+                    : error.ToString();
             }
         }
         catch (JsonException)
         {
         }
 
-        return string.Empty;
+        return string.IsNullOrWhiteSpace(body)
+            ? "unknown server error"
+            : body.Length <= 240
+                ? body
+                : body[..240];
     }
 
-    private static string NormalizeTranslation(string value)
+    private static string BuildSpeakerContext(
+        IReadOnlyList<string> context)
     {
-        var text = value
-            .Replace("\r\n", "\n")
-            .Replace("\r", "\n")
-            .Trim();
-
-        text = RoleLeakRegex().Replace(text, string.Empty);
-        text = WhitespaceBeforeNewlineRegex().Replace(text, "\n");
-        text = ExcessBlankLinesRegex().Replace(text, "\n\n");
-
-        return text.Trim();
-    }
-
-    private static bool IsSuspiciousTranslation(
-        string source,
-        string translated)
-    {
-        if (string.IsNullOrWhiteSpace(translated))
-            return true;
-
-        if (RoleLeakRegex().IsMatch(translated) ||
-            ChineseMetaRegex().IsMatch(translated) ||
-            HasRunawayRepetition(translated))
-        {
-            return true;
-        }
-
-        if (translated.Length >
-            Math.Max(source.Length * 2.6, source.Length + 140))
-        {
-            return true;
-        }
-
-        var hangul = translated.Count(IsHangul);
-        var han = translated.Count(IsHan);
-        var latinWords = LatinWordRegex().Matches(translated).Count;
-        var latinLetters = translated.Count(ch =>
-            ch is >= 'A' and <= 'Z' ||
-            ch is >= 'a' and <= 'z');
-
-        // Sentence-length output should be primarily Korean, not a long run of
-        // CJK ideographs from a degenerate multilingual generation.
-        if (source.Length >= 18)
-        {
-            if (hangul < 4)
-                return true;
-
-            if (han >= 8 && han > hangul / 2)
-                return true;
-
-            // Korean dialogue should not suddenly trail off into English.
-            // Allow one proper-name/token, but reject phrase-level leakage.
-            if (latinWords >= 2 || latinLetters >= 14)
-                return true;
-        }
-
-        return false;
-    }
-
-    private static bool HasRunawayRepetition(string text)
-    {
-        if (RepeatedPhraseRegex().IsMatch(text))
-            return true;
-
-        var compact = WhitespaceRegex().Replace(text, " ");
-        if (compact.Length < 40)
-            return false;
-
-        var tokens = compact
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-        if (tokens.Length < 8)
-            return false;
-
-        var mostCommon = tokens
-            .GroupBy(token => token, StringComparer.Ordinal)
-            .Max(group => group.Count());
-
-        return mostCommon >= 6 &&
-               mostCommon >= Math.Ceiling(tokens.Length * 0.35);
-    }
-
-    private static string RecoverKoreanSentence(string text)
-    {
-        var candidates = text
-            .Split(
-                new[] { '\n', '。', '！', '？' },
-                StringSplitOptions.RemoveEmptyEntries)
+        return context
+            .Reverse()
             .Select(line => line.Trim())
-            .Where(line => line.Length >= 2)
-            .Select(line => new
-            {
-                Text = line,
-                Hangul = line.Count(IsHangul),
-                Han = line.Count(IsHan)
-            })
-            .Where(item =>
-                item.Hangul >= 3 &&
-                item.Han <= Math.Max(2, item.Hangul / 3))
-            .OrderByDescending(item => item.Hangul)
-            .FirstOrDefault();
-
-        if (candidates is null)
-            return string.Empty;
-
-        var clean = LongHanRunRegex().Replace(
-            candidates.Text,
-            string.Empty);
-
-        return clean.Trim();
+            .FirstOrDefault(line =>
+                line.StartsWith(
+                    "Current speaker:",
+                    StringComparison.OrdinalIgnoreCase))
+            ?? string.Empty;
     }
 
-    private static bool IsHangul(char ch)
-        => ch is >= '\uAC00' and <= '\uD7A3'
-            or >= '\u3131' and <= '\u318E';
-
-    private static bool IsHan(char ch)
-        => ch is >= '\u3400' and <= '\u4DBF'
-            or >= '\u4E00' and <= '\u9FFF';
-
-    private static string BuildContext(IReadOnlyList<string> context)
+    private static string DetectSourceLanguage(
+        string text,
+        string configured)
     {
-        if (context.Count == 0)
-            return "(none)";
-
-        var lines = context
-            .TakeLast(MaximumContextLines)
-            .Select(line => line.Trim())
-            .Where(line => line.Length > 0)
-            .ToArray();
-
-        if (lines.Length == 0)
-            return "(none)";
-
-        var builder = new StringBuilder();
-
-        foreach (var line in lines)
+        if (!string.Equals(
+                configured,
+                "auto",
+                StringComparison.OrdinalIgnoreCase))
         {
-            if (builder.Length > 0)
-                builder.Append(' ');
-
-            var remaining =
-                MaximumContextCharacters - builder.Length;
-            if (remaining <= 0)
-                break;
-
-            builder.Append(
-                line.Length <= remaining
-                    ? line
-                    : line[..remaining]);
+            return configured;
         }
 
-        return builder.Length == 0
-            ? "(none)"
-            : builder.ToString();
+        if (text.Any(ch =>
+                ch is >= '\u3040' and <= '\u30FF'))
+        {
+            return "ja";
+        }
+
+        if (text.Any(ch =>
+                ch is >= 'A' and <= 'Z' ||
+                ch is >= 'a' and <= 'z'))
+        {
+            return "en";
+        }
+
+        return "auto";
     }
 
-    [GeneratedRegex(@"\{[\s\S]*\}")]
-    private static partial Regex JsonObjectRegex();
+    private static string LanguageName(string code)
+        => code.ToLowerInvariant() switch
+        {
+            "en" => "English",
+            "ja" => "Japanese",
+            "ko" => "Korean",
+            _ => "source language"
+        };
 
-    [GeneratedRegex(
-        @"(?im)^\s*(user|assistant|system)\s*:?(?:\s|$)")]
-    private static partial Regex RoleLeakRegex();
+    private static int OutputBudget(
+        string sourceText,
+        int maximum)
+        => Math.Clamp(
+            sourceText.Length + 28,
+            48,
+            maximum);
 
-    [GeneratedRegex(
-        @"[请纠正翻译最后一句韩语重新输出答案解释]")]
-    private static partial Regex ChineseMetaRegex();
+    private static bool IsTranslateGemmaModel(
+        string model)
+        => model.StartsWith(
+            "translategemma",
+            StringComparison.OrdinalIgnoreCase);
 
-    [GeneratedRegex(@"(.{2,12})\1{3,}")]
-    private static partial Regex RepeatedPhraseRegex();
-
-    [GeneratedRegex(@"[\u3400-\u4DBF\u4E00-\u9FFF]{5,}")]
-    private static partial Regex LongHanRunRegex();
-
-    [GeneratedRegex(@"[A-Za-z][A-Za-z'-]*")]
-    private static partial Regex LatinWordRegex();
-
-    [GeneratedRegex(@"\s+")]
-    private static partial Regex WhitespaceRegex();
-
-    [GeneratedRegex(@"[ \t]+\n")]
-    private static partial Regex WhitespaceBeforeNewlineRegex();
-
-    [GeneratedRegex(@"\n{3,}")]
-    private static partial Regex ExcessBlankLinesRegex();
+    private static bool IsTransient(
+        HttpStatusCode? status)
+        => status is
+            HttpStatusCode.InternalServerError or
+            HttpStatusCode.BadGateway or
+            HttpStatusCode.ServiceUnavailable or
+            HttpStatusCode.GatewayTimeout or
+            (HttpStatusCode)429;
 }
