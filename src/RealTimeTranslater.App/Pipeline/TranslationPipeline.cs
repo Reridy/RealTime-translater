@@ -25,7 +25,7 @@ public sealed class TranslationPipeline : IDisposable
     private readonly string _textSourceMode;
     private readonly UnityAdapterReceiver _unityAdapterReceiver = new();
 
-    private long _lastUnityVersion = -1;
+    private string _lastUnityTextKey = string.Empty;
     private IReadOnlyList<TranslatedRegion> _lastUnityTranslations =
         Array.Empty<TranslatedRegion>();
 
@@ -106,7 +106,14 @@ public sealed class TranslationPipeline : IDisposable
 
                 if (unityRegions.Count > 0)
                 {
-                    if (unitySnapshot.Version != _lastUnityVersion ||
+                    var unityTextKey = string.Join(
+                        "\u001e",
+                        unityRegions.Select(region => region.Text));
+
+                    if (!string.Equals(
+                            unityTextKey,
+                            _lastUnityTextKey,
+                            StringComparison.Ordinal) ||
                         _lastUnityTranslations.Count != unityRegions.Count)
                     {
                         _lastUnityTranslations =
@@ -116,7 +123,7 @@ public sealed class TranslationPipeline : IDisposable
                                 _targetLanguage,
                                 cancellationToken);
 
-                        _lastUnityVersion = unitySnapshot.Version;
+                        _lastUnityTextKey = unityTextKey;
                     }
                     else
                     {
