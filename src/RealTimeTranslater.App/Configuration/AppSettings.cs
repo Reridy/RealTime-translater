@@ -50,5 +50,8 @@ public sealed class OverlaySettings
     public double FontSizeScale { get; set; } = 0.82;
     public double MinimumFontSize { get; set; } = 12;
     public double MaximumFontSize { get; set; } = 38;
+    public double SubtitleBackgroundOpacity { get; set; } = 0.58;
+    public double SubtitleMaxWidthRatio { get; set; } = 0.74;
+    public double SubtitleBottomMargin { get; set; } = 18;
     public bool AllowScreenshots { get; set; } = false;
 }
