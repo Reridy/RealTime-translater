@@ -63,60 +63,82 @@ public sealed class TranslationCoordinator
         if (misses.Count > 1 &&
             _provider is IBatchTranslationProvider batchProvider)
         {
-            var requestContext = BuildRequestContext(
-                additionalContext);
+            var completedIndexes =
+                new HashSet<int>();
 
-            var requests = misses
-                .Select(entry => new TranslationRequest(
-                    entry.Text,
-                    sourceLanguage,
-                    targetLanguage,
-                    requestContext))
-                .ToArray();
-
-            try
+            foreach (var chunk in misses.Chunk(6))
             {
-                var batch =
-                    await batchProvider.TranslateBatchAsync(
-                        requests,
-                        cancellationToken);
+                cancellationToken
+                    .ThrowIfCancellationRequested();
 
-                if (batch.Count != misses.Count)
-                {
-                    throw new InvalidOperationException(
-                        "Batch translation result count did not match request count.");
-                }
+                if (chunk.Length <= 1)
+                    continue;
 
-                for (var i = 0; i < misses.Count; i++)
-                {
-                    var translated =
-                        batch[i].Trim();
+                var requestContext =
+                    BuildRequestContext(
+                        additionalContext);
 
-                    if (translated.Length == 0)
-                        translated = misses[i].Text;
-
-                    translatedByIndex[
-                        misses[i].Index] =
-                        translated;
-
-                    _cache.Set(
+                var requests = chunk
+                    .Select(entry => new TranslationRequest(
+                        entry.Text,
                         sourceLanguage,
                         targetLanguage,
-                        misses[i].Text,
-                        translated);
-                }
+                        requestContext))
+                    .ToArray();
 
-                misses.Clear();
+                try
+                {
+                    var batch =
+                        await batchProvider.TranslateBatchAsync(
+                            requests,
+                            cancellationToken);
+
+                    if (batch.Count != chunk.Length)
+                    {
+                        throw new InvalidOperationException(
+                            "Batch translation result count did not match request count.");
+                    }
+
+                    for (var i = 0; i < chunk.Length; i++)
+                    {
+                        var translated =
+                            batch[i].Trim();
+
+                        if (translated.Length == 0)
+                            translated = chunk[i].Text;
+
+                        translatedByIndex[
+                            chunk[i].Index] =
+                            translated;
+
+                        completedIndexes.Add(
+                            chunk[i].Index);
+
+                        _cache.Set(
+                            sourceLanguage,
+                            targetLanguage,
+                            chunk[i].Text,
+                            translated);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch
+                {
+                    // Batch mode is an optimization. Keep only this failed
+                    // chunk for the proven single-line fallback path.
+                }
             }
-            catch (OperationCanceledException)
+
+            if (completedIndexes.Count > 0)
             {
-                throw;
-            }
-            catch
-            {
-                // Batch mode is an optimization. Fall back to the existing
-                // single-line path if the local model cannot follow the batch
-                // format reliably.
+                misses = misses
+                    .Where(entry =>
+                        !completedIndexes.Contains(
+                            entry.Index))
+                    .ToList();
             }
         }
 
