@@ -3,6 +3,7 @@
   "ChangeThreshold": 0.025,
   "StabilityFrames": 2,
   "OcrLanguage": "jpn+eng",
+  "TextSource": "OCR",
   "OcrDataPath": "tessdata",
   "MinimumOcrConfidence": 45.0,
   "Translation": {
