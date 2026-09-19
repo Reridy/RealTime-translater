@@ -28,6 +28,7 @@ public sealed class TranslationPipeline : IDisposable
     private string _lastUnityTextKey = string.Empty;
     private IReadOnlyList<TranslatedRegion> _lastUnityTranslations =
         Array.Empty<TranslatedRegion>();
+    private double? _lastUnityTranslationMilliseconds;
 
     public TranslationPipeline(
         IntPtr targetWindow,
@@ -52,7 +53,7 @@ public sealed class TranslationPipeline : IDisposable
         _stabilizer = new FrameTextStabilizer(settings.StabilityFrames);
         _translator = new TranslationCoordinator(
             translationProvider,
-            contextLimit: 4);
+            contextLimit: 2);
     }
 
     public event Action<string>? StatusChanged;
@@ -123,12 +124,18 @@ public sealed class TranslationPipeline : IDisposable
                             StringComparison.Ordinal) ||
                         _lastUnityTranslations.Count != unityRegions.Count)
                     {
+                        var translationStart = Stopwatch.GetTimestamp();
+
                         _lastUnityTranslations =
                             await _translator.TranslateAsync(
                                 unityRegions,
                                 "auto",
                                 _targetLanguage,
                                 cancellationToken);
+
+                        _lastUnityTranslationMilliseconds =
+                            Stopwatch.GetElapsedTime(
+                                translationStart).TotalMilliseconds;
 
                         _lastUnityTextKey = unityTextKey;
                     }
@@ -162,8 +169,13 @@ public sealed class TranslationPipeline : IDisposable
                         ? "dialogue"
                         : "all text";
 
+                var latencyNote =
+                    _lastUnityTranslationMilliseconds is double latency
+                        ? $" · translate {latency:0} ms"
+                        : string.Empty;
+
                 StatusChanged?.Invoke(
-                    $"Running · {_capture.BackendName} · Unity Adapter {unityScope} · {unityRegions.Count}/{unitySnapshot.Data.Regions.Count} selected text region(s)");
+                    $"Running · {_capture.BackendName} · Unity Adapter {unityScope} · {unityRegions.Count}/{unitySnapshot.Data.Regions.Count} selected text region(s){latencyNote}");
 
                 await DelayRemaining(
                     loopStart,
