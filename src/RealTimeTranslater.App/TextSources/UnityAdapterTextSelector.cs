@@ -45,6 +45,27 @@ internal static partial class UnityAdapterTextSelector
         "active while owned", "augments", "magic:", "sword:"
     };
 
+    private static readonly HashSet<string> ShortHudLabels =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "cond",
+            "condition",
+            "ap",
+            "hp",
+            "mp",
+            "sp",
+            "exp",
+            "lv",
+            "level",
+            "atk",
+            "def",
+            "gold",
+            "g",
+            "turn",
+            "day",
+            "week"
+        };
+
     private static readonly HashSet<string> NavigationControlLabels =
         new(StringComparer.OrdinalIgnoreCase)
         {
@@ -146,11 +167,31 @@ internal static partial class UnityAdapterTextSelector
         var hasJapaneseSentencePunctuation =
             JapaneseSentencePunctuationRegex().IsMatch(text);
 
+        var normalizedLabel = NormalizeControlLabel(
+            ShortLabelPunctuationRegex().Replace(text, string.Empty));
+
+        var looksLikeShortHudLabel =
+            !isChoice &&
+            !hasStrongDialogueHint &&
+            lineCount == 1 &&
+            (
+                ShortHudLabels.Contains(normalizedLabel) ||
+                (
+                    text.Length <= 8 &&
+                    words <= 2 &&
+                    japaneseCount == 0 &&
+                    ShortAsciiLabelRegex().IsMatch(text)
+                )
+            );
+
         var looksLikeSentence =
-            hasSentenceEnding ||
-            hasJapaneseSentencePunctuation ||
-            (words >= 5 && text.Length >= 24) ||
-            (japaneseCount >= 8 && text.Length >= 16);
+            !looksLikeShortHudLabel &&
+            (
+                hasSentenceEnding ||
+                hasJapaneseSentencePunctuation ||
+                (words >= 5 && text.Length >= 24) ||
+                (japaneseCount >= 8 && text.Length >= 16)
+            );
 
         var looksStructuredUi =
             StructuredUiMetadataHints.Any(metadata.Contains) ||
@@ -159,7 +200,7 @@ internal static partial class UnityAdapterTextSelector
             BulletLineRegex().Matches(text).Count >= 2 ||
             UiNoiseHints.Count(lowered.Contains) >= 2;
 
-        if (hasSpeakerHint)
+        if (hasSpeakerHint || looksLikeShortHudLabel)
             return Reject(region);
 
         if (region.IsSelectable &&
@@ -345,4 +386,10 @@ internal static partial class UnityAdapterTextSelector
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex WhitespaceRegex();
+
+    [GeneratedRegex(@"[.:：·・]+$")]
+    private static partial Regex ShortLabelPunctuationRegex();
+
+    [GeneratedRegex(@"^[A-Za-z][A-Za-z0-9 .:/_-]{0,7}$")]
+    private static partial Regex ShortAsciiLabelRegex();
 }
