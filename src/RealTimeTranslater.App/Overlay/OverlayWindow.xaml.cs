@@ -51,50 +51,151 @@ public partial class OverlayWindow : Window
         TranslatedRegion region,
         double dpiScale)
     {
-        var width = Math.Max(24, region.Bounds.Width / dpiScale);
-        var height = Math.Max(16, region.Bounds.Height / dpiScale);
+        var sourceWidth = Math.Max(
+            24,
+            region.Bounds.Width / dpiScale);
+        var sourceHeight = Math.Max(
+            16,
+            region.Bounds.Height / dpiScale);
+
+        var sourceText = region.OriginalText?.Trim() ?? string.Empty;
+        var translatedText = LimitOverlayText(
+            region.TranslatedText,
+            maxCharacters: 520,
+            maxLines: 8);
 
         var looksLikeDialogueRegion =
-            width >= Width * 0.45 &&
-            height >= Math.Max(36, Height * 0.055);
+            sourceWidth >= Width * 0.45 &&
+            sourceHeight >= Math.Max(
+                36,
+                Height * 0.055);
 
-        var fontSize = looksLikeDialogueRegion
-            ? Math.Clamp(
-                height * 0.28,
-                Math.Max(14, _settings.MinimumFontSize),
-                Math.Min(28, _settings.MaximumFontSize))
-            : Math.Clamp(
-                height * _settings.FontSizeScale,
-                _settings.MinimumFontSize,
-                _settings.MaximumFontSize);
+        var looksLikeLongContent =
+            sourceText.Length >= 42 &&
+            sourceWidth >= Math.Max(
+                180,
+                Width * 0.18);
+
+        var isLargeTextRegion =
+            looksLikeDialogueRegion ||
+            looksLikeLongContent;
+
+        var horizontalPadding =
+            isLargeTextRegion ? 8.0 : 4.0;
+        var verticalPadding =
+            isLargeTextRegion ? 5.0 : 2.0;
+
+        var boxWidth = Math.Min(
+            Math.Max(
+                sourceWidth + horizontalPadding * 2,
+                30),
+            Math.Max(30, Width - 8));
+
+        var preferredHeight =
+            isLargeTextRegion
+                ? Math.Max(
+                    sourceHeight + verticalPadding * 2,
+                    sourceHeight * 1.10)
+                : sourceHeight + verticalPadding * 2;
+
+        var maximumHeight =
+            isLargeTextRegion
+                ? Math.Min(
+                    Height * 0.42,
+                    Math.Max(
+                        preferredHeight,
+                        sourceHeight * 1.65))
+                : Math.Max(
+                    preferredHeight,
+                    sourceHeight * 2.2);
+
+        var fontCeiling =
+            looksLikeDialogueRegion
+                ? Math.Min(
+                    28,
+                    _settings.MaximumFontSize)
+                : looksLikeLongContent
+                    ? Math.Min(
+                        25,
+                        _settings.MaximumFontSize)
+                    : _settings.MaximumFontSize;
+
+        var preferredFontSize =
+            looksLikeDialogueRegion
+                ? Math.Clamp(
+                    sourceHeight * 0.28,
+                    Math.Max(
+                        14,
+                        _settings.MinimumFontSize),
+                    fontCeiling)
+                : looksLikeLongContent
+                    ? Math.Clamp(
+                        sourceHeight * 0.24,
+                        Math.Max(
+                            13,
+                            _settings.MinimumFontSize),
+                        fontCeiling)
+                    : Math.Clamp(
+                        sourceHeight *
+                            _settings.FontSizeScale,
+                        _settings.MinimumFontSize,
+                        fontCeiling);
+
+        var availableWidth =
+            Math.Max(
+                20,
+                boxWidth -
+                horizontalPadding * 2);
+
+        var availableHeight =
+            Math.Max(
+                16,
+                maximumHeight -
+                verticalPadding * 2);
+
+        var fontSize = FitFontSize(
+            translatedText,
+            preferredFontSize,
+            _settings.MinimumFontSize,
+            availableWidth,
+            availableHeight,
+            isLargeTextRegion);
 
         var textBlock = new TextBlock
         {
-            Text = LimitOverlayText(
-                region.TranslatedText,
-                maxCharacters: 420,
-                maxLines: 5),
+            Text = translatedText,
             Foreground = Brushes.White,
             FontWeight = FontWeights.SemiBold,
             FontSize = fontSize,
             TextWrapping = TextWrapping.Wrap,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            VerticalAlignment = VerticalAlignment.Center,
-            LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
-            LineHeight = fontSize * 1.22,
-            Effect = looksLikeDialogueRegion
+            TextTrimming = isLargeTextRegion
+                ? TextTrimming.None
+                : TextTrimming.CharacterEllipsis,
+            TextAlignment = isLargeTextRegion
+                ? TextAlignment.Left
+                : TextAlignment.Center,
+            VerticalAlignment = isLargeTextRegion
+                ? VerticalAlignment.Top
+                : VerticalAlignment.Center,
+            LineStackingStrategy =
+                LineStackingStrategy.BlockLineHeight,
+            LineHeight = fontSize * 1.20,
+            Effect = isLargeTextRegion
                 ? new DropShadowEffect
                 {
                     BlurRadius = 3,
                     ShadowDepth = 1,
-                    Opacity = 0.85
+                    Opacity = 0.82
                 }
                 : null
         };
 
-        var opacity = looksLikeDialogueRegion
-            ? Math.Max(_settings.BackgroundOpacity, 0.93)
-            : _settings.BackgroundOpacity;
+        var opacity =
+            isLargeTextRegion
+                ? Math.Max(
+                    _settings.BackgroundOpacity,
+                    0.94)
+                : _settings.BackgroundOpacity;
 
         var alpha = (byte)Math.Clamp(
             opacity * 255.0,
@@ -103,25 +204,104 @@ public partial class OverlayWindow : Window
 
         var border = new Border
         {
-            Width = width,
-            MinHeight = height,
-            MaxHeight = looksLikeDialogueRegion
-                ? Math.Max(height * 1.25, height + 8)
-                : Math.Max(height * 2.4, height + 4),
-            Padding = looksLikeDialogueRegion
-                ? new Thickness(8, 4, 8, 5)
-                : new Thickness(3, 1, 3, 1),
+            Width = boxWidth,
+            MinHeight = preferredHeight,
+            MaxHeight = maximumHeight,
+            Padding = new Thickness(
+                horizontalPadding,
+                verticalPadding,
+                horizontalPadding,
+                verticalPadding),
             CornerRadius = new CornerRadius(
-                looksLikeDialogueRegion ? 5 : 3),
+                isLargeTextRegion ? 5 : 3),
             Background = new SolidColorBrush(
-                Color.FromArgb(alpha, 10, 10, 10)),
+                Color.FromArgb(
+                    alpha,
+                    10,
+                    10,
+                    10)),
             Child = textBlock,
-            IsHitTestVisible = false
+            IsHitTestVisible = false,
+            ClipToBounds = true,
+            SnapsToDevicePixels = true
         };
 
-        Canvas.SetLeft(border, region.Bounds.X / dpiScale);
-        Canvas.SetTop(border, region.Bounds.Y / dpiScale);
+        border.Measure(
+            new Size(
+                boxWidth,
+                maximumHeight));
+
+        var x =
+            region.Bounds.X / dpiScale -
+            horizontalPadding;
+        var y =
+            region.Bounds.Y / dpiScale -
+            verticalPadding;
+
+        x = Math.Clamp(
+            x,
+            2,
+            Math.Max(
+                2,
+                Width - boxWidth - 2));
+
+        var measuredHeight = Math.Clamp(
+            border.DesiredSize.Height,
+            preferredHeight,
+            maximumHeight);
+
+        y = Math.Clamp(
+            y,
+            2,
+            Math.Max(
+                2,
+                Height - measuredHeight - 2));
+
+        Canvas.SetLeft(border, x);
+        Canvas.SetTop(border, y);
         OverlayCanvas.Children.Add(border);
+    }
+
+    private static double FitFontSize(
+        string text,
+        double preferred,
+        double minimum,
+        double width,
+        double height,
+        bool topAligned)
+    {
+        var candidate = Math.Max(
+            minimum,
+            preferred);
+
+        for (var size = candidate;
+             size >= minimum;
+             size -= 0.75)
+        {
+            var probe = new TextBlock
+            {
+                Text = text,
+                FontWeight = FontWeights.SemiBold,
+                FontSize = size,
+                TextWrapping = TextWrapping.Wrap,
+                TextAlignment = topAligned
+                    ? TextAlignment.Left
+                    : TextAlignment.Center,
+                LineStackingStrategy =
+                    LineStackingStrategy.BlockLineHeight,
+                LineHeight = size * 1.20
+            };
+
+            probe.Measure(
+                new Size(
+                    Math.Max(1, width),
+                    double.PositiveInfinity));
+
+            if (probe.DesiredSize.Height <= height)
+                return size;
+        }
+
+        return minimum;
     }
 
     private void RenderSubtitle(
