@@ -83,7 +83,7 @@ If the status instead says `Unity Adapter waiting, OCR fallback`, check:
 for:
 
 ```
-RealTimeTranslater Unity Adapter 0.2.0 loaded; read-only text capture enabled.
+RealTimeTranslater Unity Adapter 0.3.0 loaded; tight text bounds enabled.
 ```
 
 ## Protocol
@@ -122,6 +122,7 @@ Coordinates use Unity's current render resolution and a top-left origin. The des
 ## Current limitations
 
 - The adapter scans active `TextMeshProUGUI` and legacy `UnityEngine.UI.Text` objects every 200 ms.
+- For TextMeshProUGUI, version 0.3.0 publishes the actual rendered text bounds (`textBounds`) when available instead of the whole RectTransform. Replace mode therefore masks only the glyph area plus a very small margin; RectTransform bounds remain as a fallback.
 - Transparent text hidden by `Graphic.color.a` or parent `CanvasGroup.alpha` is rejected before publishing.
 - Each region also carries its Unity object name and hierarchy path, plus real Unity `Selectable`/`Button` ancestry. The adapter marks choice-like and speaker-like objects so the desktop app can distinguish dialogue text from SKIP/AUTO controls and nameplates.
 - The desktop UI exposes a **Translate dialogue / choices only** checkbox for Unity Adapter mode. When checked, dialogue/choice filtering is used in both Subtitle and Replace modes. When unchecked, all meaningful visible Unity UI text is translated (up to the safety cap).
@@ -157,3 +158,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup-recommended-translation
 General chat models such as Qwen remain supported. For those models, the app uses structured output first, validates the Korean result, falls back to a strict plain-text retry when needed, and rejects English/Chinese leakage, repeated garbage, role labels, and malformed output.
 
 Ollama HTTP/server failures no longer terminate the capture pipeline. The current line is left unobscured, the status reports the error, and the translator retries after a short cooldown.
+
+
+## Replace mode bounds
+
+Replace mode is intentionally conservative about screen coverage. For TextMeshPro UI, the Unity adapter reports the tight rendered-text rectangle rather than the full dialogue or profile panel. The desktop overlay adds only a few pixels of padding, shrinks Korean text to fit before expanding the mask, and limits any height growth for long paragraphs.
+
+Because this requires adapter-side geometry data, upgrading from adapter 0.2.x to 0.3.x requires rebuilding and reinstalling the BepInEx adapter with `scripts/build-unity-adapter.ps1`, then restarting the game.
