@@ -13,7 +13,7 @@ namespace RealTimeTranslater.UnityBepInEx;
 [BepInPlugin(
     "com.realtimetranslater.unityadapter",
     "RealTimeTranslater Unity Adapter",
-    "0.2.0")]
+    "0.3.0")]
 public sealed class Plugin : BaseUnityPlugin
 {
     private const int MaximumRegions = 128;
@@ -34,7 +34,7 @@ public sealed class Plugin : BaseUnityPlugin
 
         StartCoroutine(PublishLoop());
         Logger.LogInfo(
-            "RealTimeTranslater Unity Adapter 0.2.0 loaded; read-only text capture enabled.");
+            "RealTimeTranslater Unity Adapter 0.3.0 loaded; tight text bounds enabled.");
     }
 
     private void OnDestroy()
@@ -130,8 +130,20 @@ public sealed class Plugin : BaseUnityPlugin
         if (string.IsNullOrEmpty(text))
             return;
 
-        if (!TryGetScreenRect(graphic, out var rect))
+        ScreenRect rect;
+
+        if (graphic is TextMeshProUGUI tmp)
+        {
+            if (!TryGetTightTextScreenRect(tmp, out rect) &&
+                !TryGetScreenRect(graphic, out rect))
+            {
+                return;
+            }
+        }
+        else if (!TryGetScreenRect(graphic, out rect))
+        {
             return;
+        }
 
         if (rect.Width < 2 || rect.Height < 2)
             return;
@@ -293,20 +305,72 @@ public sealed class Plugin : BaseUnityPlugin
         return text;
     }
 
-    private static bool TryGetScreenRect(
-        Graphic graphic,
+    private static bool TryGetTightTextScreenRect(
+        TextMeshProUGUI text,
         out ScreenRect result)
     {
         result = default(ScreenRect);
 
-        var rectTransform = graphic.rectTransform;
-        if (rectTransform == null)
+        if (text == null ||
+            text.rectTransform == null ||
+            string.IsNullOrWhiteSpace(text.text))
+        {
+            return false;
+        }
+
+        try
+        {
+            text.ForceMeshUpdate(
+                ignoreActiveState: false,
+                forceTextReparsing: false);
+        }
+        catch
+        {
+            return false;
+        }
+
+        var bounds = text.textBounds;
+        var size = bounds.size;
+
+        if (size.x <= 0.01f || size.y <= 0.01f)
             return false;
 
-        var corners = new Vector3[4];
-        rectTransform.GetWorldCorners(corners);
+        var min = bounds.min;
+        var max = bounds.max;
 
-        var canvas = graphic.canvas;
+        var localCorners = new[]
+        {
+            new Vector3(min.x, min.y, 0f),
+            new Vector3(max.x, min.y, 0f),
+            new Vector3(max.x, max.y, 0f),
+            new Vector3(min.x, max.y, 0f)
+        };
+
+        var worldCorners = new Vector3[4];
+
+        for (var i = 0; i < localCorners.Length; i++)
+        {
+            worldCorners[i] =
+                text.rectTransform.TransformPoint(
+                    localCorners[i]);
+        }
+
+        return TryGetScreenRectFromWorldPoints(
+            text.canvas,
+            worldCorners,
+            out result);
+    }
+
+    private static bool TryGetScreenRectFromWorldPoints(
+        Canvas canvas,
+        Vector3[] worldPoints,
+        out ScreenRect result)
+    {
+        result = default(ScreenRect);
+
+        if (worldPoints == null || worldPoints.Length == 0)
+            return false;
+
         Camera camera = null;
 
         if (canvas != null &&
@@ -322,17 +386,34 @@ public sealed class Plugin : BaseUnityPlugin
         var maxX = float.NegativeInfinity;
         var maxY = float.NegativeInfinity;
 
-        for (var i = 0; i < corners.Length; i++)
+        for (var i = 0; i < worldPoints.Length; i++)
         {
             var point = RectTransformUtility.WorldToScreenPoint(
                 camera,
-                corners[i]);
+                worldPoints[i]);
 
             minX = Mathf.Min(minX, point.x);
             minY = Mathf.Min(minY, point.y);
             maxX = Mathf.Max(maxX, point.x);
             maxY = Mathf.Max(maxY, point.y);
         }
+
+        return TryCreateClampedScreenRect(
+            minX,
+            minY,
+            maxX,
+            maxY,
+            out result);
+    }
+
+    private static bool TryCreateClampedScreenRect(
+        float minX,
+        float minY,
+        float maxX,
+        float maxY,
+        out ScreenRect result)
+    {
+        result = default(ScreenRect);
 
         if (float.IsInfinity(minX) ||
             float.IsInfinity(minY) ||
@@ -357,11 +438,39 @@ public sealed class Plugin : BaseUnityPlugin
 
         var x = Mathf.RoundToInt(minX);
         var y = Mathf.RoundToInt(Screen.height - maxY);
-        var width = Mathf.Max(1, Mathf.RoundToInt(maxX - minX));
-        var height = Mathf.Max(1, Mathf.RoundToInt(maxY - minY));
+        var width = Mathf.Max(
+            1,
+            Mathf.RoundToInt(maxX - minX));
+        var height = Mathf.Max(
+            1,
+            Mathf.RoundToInt(maxY - minY));
 
-        result = new ScreenRect(x, y, width, height);
+        result = new ScreenRect(
+            x,
+            y,
+            width,
+            height);
+
         return true;
+    }
+
+    private static bool TryGetScreenRect(
+        Graphic graphic,
+        out ScreenRect result)
+    {
+        result = default(ScreenRect);
+
+        var rectTransform = graphic.rectTransform;
+        if (rectTransform == null)
+            return false;
+
+        var corners = new Vector3[4];
+        rectTransform.GetWorldCorners(corners);
+
+        return TryGetScreenRectFromWorldPoints(
+            graphic.canvas,
+            corners,
+            out result);
     }
 
     private static int CompareRegions(
