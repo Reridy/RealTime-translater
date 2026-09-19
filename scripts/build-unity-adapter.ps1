@@ -33,7 +33,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Adapter build failed."
 }
 
-$output = Join-Path $repo "adapters\UnityBepInEx\bin\Release\netstandard2.0\RealTimeTranslater.UnityBepInEx.dll"
+$output = Join-Path $repo "adapters\UnityBepInEx\bin\Release\netstandard2.1\RealTimeTranslater.UnityBepInEx.dll"
 if (-not (Test-Path $output)) {
     throw "Built adapter DLL was not found: $output"
 }
