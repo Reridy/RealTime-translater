@@ -10,6 +10,7 @@ public sealed class AppSettings
     public int StabilityFrames { get; set; } = 2;
     public string OcrLanguage { get; set; } = "jpn+eng";
     public string TextSource { get; set; } = "OCR";
+    public bool UnityDialogueOnly { get; set; } = true;
     public string OcrDataPath { get; set; } = "tessdata";
     public float MinimumOcrConfidence { get; set; } = 45f;
     public TranslationSettings Translation { get; set; } = new();
