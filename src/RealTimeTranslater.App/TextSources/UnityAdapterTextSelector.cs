@@ -52,11 +52,7 @@ internal static partial class UnityAdapterTextSelector
             .Select(group => group.First())
             .ToArray();
 
-        if (!dialogueOnly ||
-            !string.Equals(
-                overlayMode,
-                "Subtitle",
-                StringComparison.OrdinalIgnoreCase))
+        if (!dialogueOnly)
         {
             return visible
                 .Take(MaximumReplaceRegions)
@@ -72,7 +68,12 @@ internal static partial class UnityAdapterTextSelector
             .OrderByDescending(candidate => candidate.Score)
             .ThenBy(candidate => candidate.Region.Y)
             .ThenBy(candidate => candidate.Region.X)
-            .Take(MaximumSubtitleRegions)
+            .Take(string.Equals(
+                overlayMode,
+                "Subtitle",
+                StringComparison.OrdinalIgnoreCase)
+                    ? MaximumSubtitleRegions
+                    : MaximumReplaceRegions)
             .ToArray();
 
         return scored
