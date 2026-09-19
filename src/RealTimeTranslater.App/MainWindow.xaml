@@ -103,7 +103,7 @@
                           VerticalAlignment="Center"
                           Checked="UnityDialogueOnlyCheckBox_Changed"
                           Unchecked="UnityDialogueOnlyCheckBox_Changed"
-                          Content="Translate dialogue / choices only (unchecked = all visible text)" />
+                          Content="Translate dialogue / choices / prose only (unchecked = all visible text)" />
             </Grid>
             <Grid Margin="0,3">
                 <Grid.ColumnDefinitions>
@@ -173,7 +173,7 @@
                 <TextBlock Margin="0,12,0,0"
                            Foreground="Gray"
                            TextWrapping="Wrap"
-                           Text="Tip: for local translation quality, use translategemma:4b. Unity dialogue-only keeps HUD/menu text out of the translator." />
+                           Text="Tip: dialogue/prose mode translates conversations, choices, and long readable descriptions while filtering HUD/menu noise." />
             </StackPanel>
         </Border>
 
