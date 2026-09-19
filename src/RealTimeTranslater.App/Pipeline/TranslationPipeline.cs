@@ -156,6 +156,7 @@ public sealed class TranslationPipeline : IDisposable
                     _lastUnityTextKey = string.Empty;
                     _lastUnityTranslations =
                         Array.Empty<TranslatedRegion>();
+                    _lastUnityTranslationMilliseconds = null;
                 }
 
                 await _overlay.Dispatcher.InvokeAsync(() =>
