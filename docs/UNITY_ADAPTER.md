@@ -131,3 +131,14 @@ Coordinates use Unity's current render resolution and a top-left origin. The des
 - Complex masks/clipping can still leave some visually hidden objects in the feed.
 - Games that do not use Unity UI/TextMeshPro still require OCR or a game-specific adapter.
 - The adapter project is intentionally not part of the main CI solution because it compiles against DLLs from the user's installed game. The desktop receiver and fallback pipeline are built by normal CI.
+
+
+## Translation quality and subtitle behavior
+
+For Ollama, the desktop app keeps the model warm for 30 minutes, uses a short two-line localization context, a low-temperature localization prompt, and a bounded output budget to reduce latency while keeping Korean dialogue natural.
+
+Subtitle mode uses a compact centered panel instead of a wide opaque bar. Its width is capped, the background is lighter, text has a small shadow, and font size scales with the captured game window.
+
+Dialogue-only filtering also rejects short HUD abbreviations such as `Cond.`, `AP`, `HP`, and similar labels unless the Unity hierarchy explicitly identifies them as dialogue/choice content.
+
+The status line reports the most recent Unity translation latency in milliseconds after a new line is translated.
