@@ -23,6 +23,17 @@ public sealed class TranslationCache
 
     public int Count => _cache.Count;
 
-    private static string Key(string sourceLanguage, string targetLanguage, string text)
-        => $"{sourceLanguage}\u001f{targetLanguage}\u001f{text.Trim()}";
+    private static string Key(
+        string sourceLanguage,
+        string targetLanguage,
+        string text)
+        => $"{sourceLanguage}\u001f{targetLanguage}\u001f{NormalizeText(text)}";
+
+    private static string NormalizeText(
+        string text)
+        => string.Join(
+            " ",
+            text.Split(
+                (char[]?)null,
+                StringSplitOptions.RemoveEmptyEntries));
 }
