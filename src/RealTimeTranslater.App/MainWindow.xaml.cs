@@ -143,7 +143,7 @@ public partial class MainWindow : Window
                 }
                 catch (Exception ex)
                 {
-                    Dispatcher.BeginInvoke(() =>
+                    _ = Dispatcher.BeginInvoke(() =>
                     {
                         StatusTextBlock.Text = $"Error: {ex.Message}";
                         StartButton.IsEnabled = true;
@@ -251,7 +251,7 @@ public partial class MainWindow : Window
 
     private void OnPipelineStatusChanged(string status)
     {
-        Dispatcher.BeginInvoke(() =>
+        _ = Dispatcher.BeginInvoke(() =>
         {
             StatusTextBlock.Text = status;
         });
