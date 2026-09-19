@@ -12,7 +12,7 @@ Data flow:
 
 ```
 Unity game
-  -> active TMP_Text / UnityEngine.UI.Text
+  -> active TextMeshProUGUI / UnityEngine.UI.Text
   -> RealTimeTranslater.UnityBepInEx
   -> local named pipe: RealTimeTranslater.UnityText.v1
   -> RealTime Translater
@@ -114,7 +114,7 @@ Coordinates use Unity's current render resolution and a top-left origin. The des
 
 ## Current limitations
 
-- This first adapter scans active `TMP_Text` and legacy `UnityEngine.UI.Text` objects every 200 ms.
+- This first adapter scans active `TextMeshProUGUI` and legacy `UnityEngine.UI.Text` objects every 200 ms.
 - World-space text and unusual custom renderers may have imperfect rectangles.
 - CanvasGroup alpha/complex masking is not yet used to reject every visually hidden object.
 - Games that do not use Unity UI/TextMeshPro still require OCR or a game-specific adapter.
