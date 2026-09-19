@@ -18,18 +18,21 @@ WindowFinder enumerates visible top-level Windows and filters out this app. The 
 
 ### 2. Capture
 
-WindowCaptureService captures the client area using Graphics.CopyFromScreen.
+WindowCaptureService prefers Windows Graphics Capture (WGC) for the selected HWND.
 
-Why GDI first:
+The WGC backend:
 
-- very small implementation surface
-- easy to debug
-- no game-process access
-- enough for a functional MVP
+- creates a GraphicsCaptureItem directly from the selected HWND
+- uses a Direct3D 11 device and a free-threaded capture frame pool
+- copies each captured Direct3D surface into a SoftwareBitmap and then a System.Drawing bitmap for the existing OCR pipeline
+- crops the full captured window back to the target client area so OCR coordinates still line up with the overlay
+- captures the target window directly instead of grabbing composed desktop pixels
 
-Known tradeoff: the window must remain visible and exclusive fullscreen is unreliable.
+This direct-window path is important for feedback-loop prevention: when the user enables screenshot-visible overlays, Windows screenshots can include the translation overlay while WGC still supplies only the selected game window to OCR.
 
-The capture layer is intentionally isolated so it can be replaced with Windows Graphics Capture later without changing OCR, translation, or overlay logic.
+If WGC initialization fails, WindowCaptureService records the failure reason and automatically falls back to GDI CopyFromScreen. The UI status reports which backend is active.
+
+Minimized windows remain unsupported by design. Exclusive fullscreen compatibility still varies by game.
 
 ### 3. Frame change detector
 
@@ -81,11 +84,13 @@ The overlay uses the target window DPI to map capture pixels to WPF device-indep
 
 ### 8. Feedback-loop prevention
 
-An overlay can accidentally be captured by a screen-grab implementation, causing OCR to read its own Korean translation.
+An overlay can accidentally be captured by a desktop screen grab, causing OCR to read its own Korean translation.
 
-The MVP calls SetWindowDisplayAffinity with WDA_EXCLUDEFROMCAPTURE on the overlay window. On supported Windows versions this keeps the overlay out of capture APIs.
+By default the overlay uses SetWindowDisplayAffinity with WDA_EXCLUDEFROMCAPTURE.
 
-If a future capture backend does not respect this flag, the capture layer should explicitly exclude the overlay surface or temporarily hide it during capture.
+For debugging and screenshots, users can enable the screenshot-visible overlay option. In that mode the overlay becomes visible to normal Windows screenshots, but the primary WGC backend still captures the selected HWND directly, so the separate overlay window is not part of the OCR source.
+
+If WGC is unavailable and the app falls back to GDI CopyFromScreen, screenshot-visible overlay mode can once again feed the overlay back into OCR. The status text therefore exposes the active capture backend.
 
 ## Data flow
 
