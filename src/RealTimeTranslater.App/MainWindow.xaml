@@ -173,7 +173,7 @@
                 <TextBlock Margin="0,12,0,0"
                            Foreground="Gray"
                            TextWrapping="Wrap"
-                           Text="Tip: with Unity Adapter, check dialogue-only for conversations/choices or uncheck it to translate all visible Unity UI text." />
+                           Text="Tip: for local translation quality, use translategemma:4b. Unity dialogue-only keeps HUD/menu text out of the translator." />
             </StackPanel>
         </Border>
 
