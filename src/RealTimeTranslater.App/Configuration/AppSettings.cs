@@ -5,7 +5,7 @@ namespace RealTimeTranslater.App.Configuration;
 
 public sealed class AppSettings
 {
-    public int CaptureFps { get; set; } = 4;
+    public int CaptureFps { get; set; } = 8;
     public double ChangeThreshold { get; set; } = 0.025;
     public int StabilityFrames { get; set; } = 2;
     public string OcrLanguage { get; set; } = "jpn+eng";
