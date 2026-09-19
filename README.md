@@ -9,7 +9,7 @@ The MVP captures a selected game window, skips unchanged frames, runs OCR, stabi
 Implemented on the feature/mvp-realtime-translation branch:
 
 - Select any visible Windows desktop game/window.
-- Capture the client area with GDI CopyFromScreen.
+- Capture the selected window with Windows Graphics Capture, with automatic GDI fallback if WGC cannot initialize.
 - Ignore mostly unchanged frames using a lightweight frame-difference detector.
 - OCR text lines with Tesseract 5.
 - Stabilize OCR over multiple frames before translating.
@@ -17,7 +17,8 @@ Implemented on the feature/mvp-realtime-translation branch:
 - Translate through Ollama, LibreTranslate, or a built-in mock provider.
 - Preserve recent dialogue context for translation prompts.
 - Render translated text in the OCR bounding box using a transparent, click-through, topmost WPF overlay.
-- Exclude the overlay from Windows screen capture where WDA_EXCLUDEFROMCAPTURE is supported.
+- Optional screenshot-visible overlay mode. With WGC active, the app captures the target window directly so its own overlay is not fed back into OCR.
+- Exclude the overlay from Windows screen capture by default using WDA_EXCLUDEFROMCAPTURE.
 - CI build/test workflow for Windows.
 
 ## Quick start
@@ -49,7 +50,8 @@ For real translation without a cloud API key, run a local Ollama server and sele
 
 This is an MVP, not yet a universal game translator.
 
-- GDI screen capture requires the target window to be visible and can be affected by occlusion.
+- Windows Graphics Capture is the primary backend. If it is unavailable, the app falls back to GDI CopyFromScreen; that fallback requires the target window to stay visible and can be affected by occlusion.
+- Minimized target windows are not captured.
 - Exclusive fullscreen games are not supported reliably yet.
 - Tesseract OCR quality depends heavily on game font/background and installed traineddata.
 - Replace mode currently uses a semi-transparent background rectangle instead of reconstructing the underlying game texture.
