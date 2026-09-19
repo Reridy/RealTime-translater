@@ -155,6 +155,26 @@ internal static partial class UnityAdapterTextSelector
                     : MaximumReplaceRegions)
             .ToArray();
 
+        if (scored.Length == 0)
+        {
+            var rescued = visible
+                .Where(region => LooksLikeSafeNarrativeFallback(
+                    region,
+                    sourceWidth,
+                    sourceHeight))
+                .OrderByDescending(region => region.Width * region.Height)
+                .ThenByDescending(region => region.Text.Length)
+                .Take(1)
+                .Select(region => new DialogueCandidate(
+                    region,
+                    IsCandidate: true,
+                    Score: 35))
+                .ToArray();
+
+            if (rescued.Length > 0)
+                scored = rescued;
+        }
+
         return scored
             .Select(candidate => candidate.Region)
             .OrderBy(region => region.Y)
@@ -252,6 +272,28 @@ internal static partial class UnityAdapterTextSelector
                 japaneseCount >= 2
             );
 
+        var normalizedControl =
+            NormalizeControlLabel(text);
+
+        var isNavigationControl =
+            region.IsSelectable &&
+            NavigationControlLabels.Contains(
+                normalizedControl);
+
+        var looksLikeWideNarrativeSelectable =
+            region.IsSelectable &&
+            !isNavigationControl &&
+            !hasSpeakerHint &&
+            !looksLikeShortHudLabel &&
+            region.Width >= screenWidth * 0.28 &&
+            region.Y >= screenHeight * 0.42 &&
+            text.Length >= 20 &&
+            (
+                looksLikeSentence ||
+                words >= 5 ||
+                japaneseCount >= 6
+            );
+
         var labelLineCount =
             LabelLineRegex().Matches(text).Count;
         var bulletLineCount =
@@ -294,9 +336,7 @@ internal static partial class UnityAdapterTextSelector
         if (hasSpeakerHint || looksLikeShortHudLabel)
             return Reject(region);
 
-        if (region.IsSelectable &&
-            NavigationControlLabels.Contains(
-                NormalizeControlLabel(text)))
+        if (isNavigationControl)
         {
             return Reject(region);
         }
@@ -306,7 +346,8 @@ internal static partial class UnityAdapterTextSelector
         // or the button text itself clearly looks like a dialogue response.
         if (region.IsSelectable &&
             !isChoice &&
-            !looksLikeSentence)
+            !looksLikeSentence &&
+            !looksLikeWideNarrativeSelectable)
         {
             return Reject(region);
         }
@@ -341,6 +382,7 @@ internal static partial class UnityAdapterTextSelector
         var isCandidate =
             isChoice ||
             probableChoiceButton ||
+            looksLikeWideNarrativeSelectable ||
             looksLikeProseBlock ||
             (
                 isLearnedTextObject &&
@@ -385,6 +427,9 @@ internal static partial class UnityAdapterTextSelector
         if (looksLikeBottomDialogue)
             score += 45;
 
+        if (looksLikeWideNarrativeSelectable)
+            score += 85;
+
         if (isLearnedTextObject)
             score += 90;
 
@@ -416,6 +461,87 @@ internal static partial class UnityAdapterTextSelector
             region,
             IsCandidate: score >= 35,
             Score: score);
+    }
+
+    private static bool LooksLikeSafeNarrativeFallback(
+        UnityAdapterRegionDto region,
+        int screenWidth,
+        int screenHeight)
+    {
+        var text = region.Text?.Trim() ?? string.Empty;
+        if (text.Length < 20)
+            return false;
+
+        var normalized =
+            NormalizeControlLabel(text);
+
+        if (NavigationControlLabels.Contains(normalized) ||
+            ShortHudLabels.Contains(normalized) ||
+            region.IsSpeakerLike)
+        {
+            return false;
+        }
+
+        var metadata =
+            $"{region.ObjectName} {region.Hierarchy} {region.SelectableName}"
+                .ToLowerInvariant();
+
+        if (SpeakerHints.Any(metadata.Contains))
+            return false;
+
+        var words =
+            WordRegex().Matches(text).Count;
+        var japaneseCount =
+            text.EnumerateRunes()
+                .Count(rune =>
+                    IsJapaneseRune(rune.Value));
+
+        var hasSentenceShape =
+            SentenceEndingRegex().IsMatch(text) ||
+            JapaneseSentencePunctuationRegex().IsMatch(text) ||
+            words >= 5 ||
+            japaneseCount >= 6;
+
+        if (!hasSentenceShape)
+            return false;
+
+        var lowered =
+            text.ToLowerInvariant();
+
+        var uiNoiseCount =
+            UiNoiseHints.Count(
+                lowered.Contains);
+
+        var digitCount =
+            text.Count(char.IsDigit);
+
+        var digitRatio =
+            digitCount /
+            (double)Math.Max(
+                1,
+                text.Length);
+
+        if (uiNoiseCount >= 2 ||
+            digitRatio >= 0.22)
+        {
+            return false;
+        }
+
+        var largeEnough =
+            region.Width >=
+                screenWidth * 0.24 &&
+            region.Height >= 10;
+
+        var narrativePosition =
+            region.Y >=
+                screenHeight * 0.38 ||
+            ProseMetadataHints.Any(
+                metadata.Contains) ||
+            StrongDialogueHints.Any(
+                metadata.Contains);
+
+        return largeEnough &&
+            narrativePosition;
     }
 
     private static DialogueCandidate Reject(
