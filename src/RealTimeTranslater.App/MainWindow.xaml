@@ -114,6 +114,20 @@
                           Grid.Column="1"
                           MinHeight="28" />
             </Grid>
+            <Grid Margin="0,3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock VerticalAlignment="Center"
+                           Text="Screenshots" />
+                <CheckBox x:Name="AllowScreenshotsCheckBox"
+                          Grid.Column="1"
+                          VerticalAlignment="Center"
+                          Checked="AllowScreenshotsCheckBox_Changed"
+                          Unchecked="AllowScreenshotsCheckBox_Changed"
+                          Content="Allow overlay to appear in screenshots (debug)" />
+            </Grid>
         </StackPanel>
 
         <Border Grid.Row="6"
@@ -133,7 +147,7 @@
                 <TextBlock Margin="0,12,0,0"
                            Foreground="Gray"
                            TextWrapping="Wrap"
-                           Text="Tip: use windowed/borderless mode. For real translation, select Ollama or LibreTranslate. Mock is only for testing OCR and overlay placement." />
+                           Text="Tip: use windowed/borderless mode. Enabling screenshots may let the OCR see its own overlay, so keep it off during normal use." />
             </StackPanel>
         </Border>
 
