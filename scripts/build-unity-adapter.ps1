@@ -40,10 +40,35 @@ if (-not (Test-Path $output)) {
 
 $destination = Join-Path $game "BepInEx\plugins\RealTimeTranslaterUnityAdapter"
 New-Item -ItemType Directory -Force -Path $destination | Out-Null
-Copy-Item $output $destination -Force
+
+$destinationFile = Join-Path $destination "RealTimeTranslater.UnityBepInEx.dll"
+
+if (Test-Path $destinationFile) {
+    try {
+        $stream = [System.IO.File]::Open(
+            $destinationFile,
+            [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::ReadWrite,
+            [System.IO.FileShare]::None
+        )
+        $stream.Dispose()
+    }
+    catch [System.IO.IOException] {
+        throw @"
+The installed Unity adapter DLL is currently in use.
+
+Close Kurea Struggle completely before reinstalling the adapter, then run this script again.
+
+Locked file:
+  $destinationFile
+"@
+    }
+}
+
+Copy-Item $output $destinationFile -Force
 
 Write-Host ""
 Write-Host "Installed:"
-Write-Host "  $destination\RealTimeTranslater.UnityBepInEx.dll"
+Write-Host "  $destinationFile"
 Write-Host ""
 Write-Host "Start RealTime Translater, choose 'Unity Adapter + OCR fallback', then start the game."
