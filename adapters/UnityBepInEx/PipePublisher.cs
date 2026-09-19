@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using System.IO.Pipes;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 
@@ -8,16 +8,27 @@ namespace RealTimeTranslater.UnityBepInEx;
 
 internal sealed class PipePublisher : IDisposable
 {
-    private const string PipeName =
-        "RealTimeTranslater.UnityText.v1";
+    private const int Port = 47851;
 
     private readonly object _gate = new object();
     private readonly AutoResetEvent _signal =
         new AutoResetEvent(false);
 
+    private readonly Action<string> _logInfo;
+    private readonly Action<string> _logWarning;
+
     private Thread _worker;
     private bool _running;
+    private bool _loggedConnection;
     private string _pending;
+
+    public PipePublisher(
+        Action<string> logInfo,
+        Action<string> logWarning)
+    {
+        _logInfo = logInfo;
+        _logWarning = logWarning;
+    }
 
     public void Start()
     {
@@ -28,7 +39,7 @@ internal sealed class PipePublisher : IDisposable
         _worker = new Thread(WorkerLoop)
         {
             IsBackground = true,
-            Name = "RealTimeTranslater.UnityAdapter.Pipe"
+            Name = "RealTimeTranslater.UnityAdapter.Tcp"
         };
         _worker.Start();
     }
@@ -52,48 +63,67 @@ internal sealed class PipePublisher : IDisposable
         {
             try
             {
-                using (var pipe = new NamedPipeClientStream(
-                    ".",
-                    PipeName,
-                    PipeDirection.Out,
-                    PipeOptions.Asynchronous))
+                using (var client = new TcpClient())
                 {
-                    pipe.Connect(500);
+                    client.NoDelay = true;
+                    client.SendTimeout = 1500;
+                    client.Connect("127.0.0.1", Port);
 
+                    if (!_loggedConnection)
+                    {
+                        _logInfo(
+                            "Connected to RealTimeTranslater desktop receiver on 127.0.0.1:" +
+                            Port + ".");
+                        _loggedConnection = true;
+                    }
+
+                    using (var stream = client.GetStream())
                     using (var writer = new StreamWriter(
-                        pipe,
+                        stream,
                         new UTF8Encoding(false),
                         8192,
-                        true))
+                        false))
                     {
                         writer.AutoFlush = true;
 
-                        while (_running && pipe.IsConnected)
+                        while (_running && client.Connected)
                         {
                             var payload = TakePending();
 
                             if (payload != null)
                                 writer.WriteLine(payload);
 
-                            _signal.WaitOne(250);
+                            _signal.WaitOne(200);
                         }
                     }
                 }
             }
-            catch (TimeoutException)
+            catch (SocketException)
             {
-                _signal.WaitOne(500);
+                _loggedConnection = false;
+                _signal.WaitOne(400);
             }
             catch (IOException)
             {
+                _loggedConnection = false;
                 _signal.WaitOne(250);
             }
             catch (ObjectDisposedException)
             {
                 return;
             }
-            catch
+            catch (ThreadInterruptedException)
             {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _loggedConnection = false;
+                _logWarning(
+                    "Unity adapter IPC error: " +
+                    ex.GetType().Name +
+                    ": " +
+                    ex.Message);
                 _signal.WaitOne(500);
             }
         }
