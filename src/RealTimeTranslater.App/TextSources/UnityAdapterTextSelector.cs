@@ -174,6 +174,6 @@ internal static partial class UnityAdapterTextSelector
     [GeneratedRegex(@"[\p{L}\p{N}]+")]
     private static partial Regex WordRegex();
 
-    [GeneratedRegex(@"[.!?！？。…](?:[\"'”’）)]*)$")]
+    [GeneratedRegex("[.!?！？。…](?:[\\\"\'”’）)]*)$")]
     private static partial Regex SentenceEndingRegex();
 }
