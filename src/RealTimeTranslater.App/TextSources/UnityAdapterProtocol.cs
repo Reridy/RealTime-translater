@@ -12,6 +12,8 @@ internal sealed class UnityAdapterRegionDto
 {
     public string Text { get; set; } = string.Empty;
     public string Kind { get; set; } = string.Empty;
+    public string ObjectName { get; set; } = string.Empty;
+    public string Hierarchy { get; set; } = string.Empty;
     public int X { get; set; }
     public int Y { get; set; }
     public int Width { get; set; }
