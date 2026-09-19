@@ -153,6 +153,10 @@ public partial class MainWindow : Window
                         StopButton.IsEnabled = false;
                     });
                 }
+                finally
+                {
+                    pipeline.Dispose();
+                }
             }, token);
 
             StartButton.IsEnabled = false;
