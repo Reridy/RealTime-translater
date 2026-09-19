@@ -142,3 +142,18 @@ Subtitle mode uses a compact centered panel instead of a wide opaque bar. Its wi
 Dialogue-only filtering also rejects short HUD abbreviations such as `Cond.`, `AP`, `HP`, and similar labels unless the Unity hierarchy explicitly identifies them as dialogue/choice content.
 
 The status line reports the most recent Unity translation latency in milliseconds after a new line is translated.
+
+
+## Recommended local translation model
+
+For reliable English/Japanese -> Korean translation, the current recommended Ollama model is `translategemma:4b`. RealTime Translater detects TranslateGemma model names and uses the prompt format intended for that dedicated translation family.
+
+Install it with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-recommended-translation-model.ps1
+```
+
+General chat models such as Qwen remain supported. For those models, the app uses structured output first, validates the Korean result, falls back to a strict plain-text retry when needed, and rejects English/Chinese leakage, repeated garbage, role labels, and malformed output.
+
+Ollama HTTP/server failures no longer terminate the capture pipeline. The current line is left unobscured, the status reports the error, and the translator retries after a short cooldown.
