@@ -1,3 +1,4 @@
+using Xunit;
 using RealTimeTranslater.Core.Models;
 using RealTimeTranslater.Core.Translation;
 
