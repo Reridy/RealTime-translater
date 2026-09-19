@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using RealTimeTranslater.App.Configuration;
 using RealTimeTranslater.App.Interop;
 using RealTimeTranslater.Core.Models;
@@ -96,50 +97,81 @@ public partial class OverlayWindow : Window
         if (regions.Count == 0)
             return;
 
-        var text = string.Join(
-            "\n",
-            regions
-                .Select(x => x.TranslatedText.Trim())
-                .Where(x => x.Length > 0)
-                .TakeLast(6));
+        var lines = regions
+            .Select(x => x.TranslatedText.Trim())
+            .Where(x => x.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .TakeLast(4)
+            .ToArray();
 
-        if (text.Length == 0)
+        if (lines.Length == 0)
             return;
 
-        var alpha = (byte)Math.Clamp(
-            _settings.BackgroundOpacity * 255.0,
-            0,
-            255);
+        var text = string.Join("\n", lines);
+
+        var maxWidth = Math.Clamp(
+            Width * _settings.SubtitleMaxWidthRatio,
+            320,
+            Math.Max(320, Width - 48));
+
+        var fontSize = Math.Clamp(
+            Height * 0.024 * _settings.FontSizeScale,
+            _settings.MinimumFontSize,
+            Math.Min(_settings.MaximumFontSize, 28));
 
         var textBlock = new TextBlock
         {
             Text = text,
             Foreground = Brushes.White,
             FontWeight = FontWeights.SemiBold,
-            FontSize = Math.Clamp(
-                22 * _settings.FontSizeScale,
-                _settings.MinimumFontSize,
-                _settings.MaximumFontSize),
+            FontSize = fontSize,
             TextWrapping = TextWrapping.Wrap,
-            TextAlignment = TextAlignment.Center
+            TextAlignment = TextAlignment.Center,
+            LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+            LineHeight = fontSize * 1.24,
+            MaxWidth = Math.Max(280, maxWidth - 28),
+            Effect = new DropShadowEffect
+            {
+                BlurRadius = 3,
+                ShadowDepth = 1,
+                Opacity = 0.9
+            }
         };
+
+        var alpha = (byte)Math.Clamp(
+            _settings.SubtitleBackgroundOpacity * 255.0,
+            0,
+            255);
 
         var border = new Border
         {
-            Width = Math.Max(320, Width * 0.8),
-            Padding = new Thickness(14, 8, 14, 8),
-            CornerRadius = new CornerRadius(6),
+            MaxWidth = maxWidth,
+            MinWidth = Math.Min(280, maxWidth),
+            Padding = new Thickness(14, 6, 14, 7),
+            CornerRadius = new CornerRadius(7),
             Background = new SolidColorBrush(
-                Color.FromArgb(alpha, 10, 10, 10)),
+                Color.FromArgb(alpha, 8, 8, 8)),
             Child = textBlock,
-            IsHitTestVisible = false
+            IsHitTestVisible = false,
+            SnapsToDevicePixels = true
         };
 
-        border.Measure(new Size(border.Width, double.PositiveInfinity));
+        border.Measure(new Size(maxWidth, double.PositiveInfinity));
+
+        var desiredWidth = Math.Min(
+            maxWidth,
+            Math.Max(border.MinWidth, border.DesiredSize.Width));
         var desiredHeight = border.DesiredSize.Height;
 
-        Canvas.SetLeft(border, Math.Max(0, (Width - border.Width) / 2));
-        Canvas.SetTop(border, Math.Max(0, Height - desiredHeight - 28));
+        border.Width = desiredWidth;
+
+        var left = Math.Max(12, (Width - desiredWidth) / 2);
+        var top = Math.Max(
+            12,
+            Height - desiredHeight - _settings.SubtitleBottomMargin);
+
+        Canvas.SetLeft(border, left);
+        Canvas.SetTop(border, top);
         OverlayCanvas.Children.Add(border);
     }
 
