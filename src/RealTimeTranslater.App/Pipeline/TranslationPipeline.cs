@@ -39,6 +39,8 @@ public sealed class TranslationPipeline : IDisposable
         DateTimeOffset.MinValue;
     private DateTimeOffset _lastUnityAdapterSeenAt =
         DateTimeOffset.MinValue;
+    private readonly HashSet<string> _learnedUnityTextObjects =
+        new(StringComparer.Ordinal);
 
     public TranslationPipeline(
         IntPtr targetWindow,
@@ -117,7 +119,15 @@ public sealed class TranslationPipeline : IDisposable
                     UnityAdapterTextSelector.Select(
                         unitySnapshot,
                         _settings.Overlay.Mode,
-                        _settings.UnityDialogueOnly);
+                        _settings.UnityDialogueOnly,
+                        _learnedUnityTextObjects);
+
+                foreach (var selected in selectedUnityRegions)
+                {
+                    _learnedUnityTextObjects.Add(
+                        UnityAdapterTextSelector.GetObjectKey(
+                            selected));
+                }
 
                 var unityRegions = UnityAdapterRegionMapper.Map(
                     unitySnapshot,
@@ -493,7 +503,8 @@ public sealed class TranslationPipeline : IDisposable
             UnityAdapterTextSelector.Select(
                 snapshot,
                 _settings.Overlay.Mode,
-                _settings.UnityDialogueOnly);
+                _settings.UnityDialogueOnly,
+                _learnedUnityTextObjects);
 
         return string.Join(
             "\u001e",
