@@ -68,8 +68,12 @@ public sealed class TranslationPipeline : IDisposable
             "Unity Adapter + OCR fallback",
             StringComparison.OrdinalIgnoreCase);
 
+        using var adapterCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken);
+
         var unityReceiverTask = useUnityAdapter
-            ? _unityAdapterReceiver.RunAsync(cancellationToken)
+            ? _unityAdapterReceiver.RunAsync(adapterCancellation.Token)
             : Task.CompletedTask;
 
         StatusChanged?.Invoke("Running");
@@ -77,7 +81,7 @@ public sealed class TranslationPipeline : IDisposable
         try
         {
             while (!cancellationToken.IsCancellationRequested)
-        {
+            {
             var loopStart = Stopwatch.GetTimestamp();
 
             using var frame = await _capture.CaptureAsync(
@@ -199,12 +203,13 @@ public sealed class TranslationPipeline : IDisposable
         {
             if (useUnityAdapter)
             {
+                adapterCancellation.Cancel();
+
                 try
                 {
                     await unityReceiverTask;
                 }
                 catch (OperationCanceledException)
-                    when (cancellationToken.IsCancellationRequested)
                 {
                 }
             }
