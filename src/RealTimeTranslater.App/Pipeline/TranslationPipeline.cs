@@ -188,10 +188,17 @@ public sealed class TranslationPipeline : IDisposable
                             unityTextKey,
                             unityRegions);
 
+                        var requiredStability =
+                            unityRegions.All(region =>
+                                LooksCompleteForImmediateTranslation(
+                                    region.Text))
+                                ? TimeSpan.Zero
+                                : TimeSpan.FromMilliseconds(75);
+
                         var textStable =
                             now -
                             _pendingUnityTextSince >=
-                            TimeSpan.FromMilliseconds(110);
+                            requiredStability;
 
                         if (!textStable)
                         {
@@ -746,6 +753,38 @@ public sealed class TranslationPipeline : IDisposable
             "\u001e",
             selected.Select(region =>
                 region.Text.Trim()));
+    }
+
+    private static bool LooksCompleteForImmediateTranslation(
+        string text)
+    {
+        var trimmed =
+            text.Trim();
+
+        if (trimmed.Length >= 90)
+            return true;
+
+        trimmed =
+            trimmed.TrimEnd(
+                '"',
+                '\'',
+                '”',
+                '’',
+                ')',
+                ']',
+                '}');
+
+        if (trimmed.Length == 0)
+            return false;
+
+        return trimmed[^1] is
+            '.' or
+            '!' or
+            '?' or
+            '。' or
+            '！' or
+            '？' or
+            '…';
     }
 
     private static string BuildTextKey(
