@@ -52,114 +52,100 @@ public partial class OverlayWindow : Window
         double dpiScale)
     {
         var sourceWidth = Math.Max(
-            24,
+            16,
             region.Bounds.Width / dpiScale);
         var sourceHeight = Math.Max(
-            16,
+            12,
             region.Bounds.Height / dpiScale);
 
-        var sourceText = region.OriginalText?.Trim() ?? string.Empty;
+        var sourceText =
+            region.OriginalText?.Trim() ??
+            string.Empty;
+
         var translatedText = LimitOverlayText(
             region.TranslatedText,
             maxCharacters: 520,
             maxLines: 8);
 
-        var looksLikeDialogueRegion =
-            sourceWidth >= Width * 0.45 &&
-            sourceHeight >= Math.Max(
-                36,
-                Height * 0.055);
+        var sourceLineEstimate = Math.Max(
+            1,
+            sourceText.Count(ch => ch == '\n') + 1);
 
         var looksLikeLongContent =
-            sourceText.Length >= 42 &&
-            sourceWidth >= Math.Max(
-                180,
-                Width * 0.18);
+            sourceText.Length >= 42 ||
+            sourceLineEstimate >= 2;
 
-        var isLargeTextRegion =
-            looksLikeDialogueRegion ||
-            looksLikeLongContent;
-
+        // Tight replace mode deliberately masks only the rendered source
+        // glyph area plus a tiny safety margin. The adapter now supplies
+        // TextMeshPro's actual text bounds instead of the whole RectTransform.
         var horizontalPadding =
-            isLargeTextRegion ? 8.0 : 4.0;
+            looksLikeLongContent ? 3.0 : 2.0;
         var verticalPadding =
-            isLargeTextRegion ? 5.0 : 2.0;
+            looksLikeLongContent ? 2.5 : 1.5;
+
+        var maximumWidth =
+            Math.Max(
+                20,
+                Width - 4);
 
         var boxWidth = Math.Min(
-            Math.Max(
-                sourceWidth + horizontalPadding * 2,
-                30),
-            Math.Max(30, Width - 8));
+            sourceWidth +
+                horizontalPadding * 2,
+            maximumWidth);
 
+        // Prefer shrinking Korean text over expanding the mask into nearby
+        // portraits, buttons, or decorative dialogue UI.
         var preferredHeight =
-            isLargeTextRegion
-                ? Math.Max(
-                    sourceHeight + verticalPadding * 2,
-                    sourceHeight * 1.10)
-                : sourceHeight + verticalPadding * 2;
+            sourceHeight +
+            verticalPadding * 2;
 
         var maximumHeight =
-            isLargeTextRegion
+            looksLikeLongContent
                 ? Math.Min(
-                    Height * 0.42,
                     Math.Max(
-                        preferredHeight,
-                        sourceHeight * 1.65))
-                : Math.Max(
-                    preferredHeight,
-                    sourceHeight * 2.2);
+                        preferredHeight + 4,
+                        sourceHeight * 1.10),
+                    Height * 0.34)
+                : preferredHeight + 2;
 
-        var fontCeiling =
-            looksLikeDialogueRegion
-                ? Math.Min(
-                    28,
-                    _settings.MaximumFontSize)
-                : looksLikeLongContent
-                    ? Math.Min(
-                        25,
-                        _settings.MaximumFontSize)
-                    : _settings.MaximumFontSize;
+        var minimumFontSize =
+            Math.Min(
+                _settings.MinimumFontSize,
+                11.0);
+
+        var estimatedLineHeight =
+            sourceHeight /
+            Math.Max(
+                1,
+                sourceLineEstimate);
 
         var preferredFontSize =
-            looksLikeDialogueRegion
-                ? Math.Clamp(
-                    sourceHeight * 0.28,
-                    Math.Max(
-                        14,
-                        _settings.MinimumFontSize),
-                    fontCeiling)
-                : looksLikeLongContent
-                    ? Math.Clamp(
-                        sourceHeight * 0.24,
-                        Math.Max(
-                            13,
-                            _settings.MinimumFontSize),
-                        fontCeiling)
-                    : Math.Clamp(
-                        sourceHeight *
-                            _settings.FontSizeScale,
-                        _settings.MinimumFontSize,
-                        fontCeiling);
+            Math.Clamp(
+                estimatedLineHeight * 0.84,
+                minimumFontSize,
+                Math.Min(
+                    _settings.MaximumFontSize,
+                    28));
 
         var availableWidth =
             Math.Max(
-                20,
+                16,
                 boxWidth -
                 horizontalPadding * 2);
 
         var availableHeight =
             Math.Max(
-                16,
+                12,
                 maximumHeight -
                 verticalPadding * 2);
 
         var fontSize = FitFontSize(
             translatedText,
             preferredFontSize,
-            _settings.MinimumFontSize,
+            minimumFontSize,
             availableWidth,
             availableHeight,
-            isLargeTextRegion);
+            topAligned: looksLikeLongContent);
 
         var textBlock = new TextBlock
         {
@@ -168,37 +154,29 @@ public partial class OverlayWindow : Window
             FontWeight = FontWeights.SemiBold,
             FontSize = fontSize,
             TextWrapping = TextWrapping.Wrap,
-            TextTrimming = isLargeTextRegion
-                ? TextTrimming.None
-                : TextTrimming.CharacterEllipsis,
-            TextAlignment = isLargeTextRegion
+            TextTrimming = TextTrimming.None,
+            TextAlignment = looksLikeLongContent
                 ? TextAlignment.Left
                 : TextAlignment.Center,
-            VerticalAlignment = isLargeTextRegion
+            VerticalAlignment = looksLikeLongContent
                 ? VerticalAlignment.Top
                 : VerticalAlignment.Center,
             LineStackingStrategy =
                 LineStackingStrategy.BlockLineHeight,
-            LineHeight = fontSize * 1.20,
-            Effect = isLargeTextRegion
-                ? new DropShadowEffect
-                {
-                    BlurRadius = 3,
-                    ShadowDepth = 1,
-                    Opacity = 0.82
-                }
-                : null
+            LineHeight = fontSize * 1.17,
+            Effect = new DropShadowEffect
+            {
+                BlurRadius = 2,
+                ShadowDepth = 1,
+                Opacity = 0.78
+            }
         };
 
-        var opacity =
-            isLargeTextRegion
-                ? Math.Max(
-                    _settings.BackgroundOpacity,
-                    0.94)
-                : _settings.BackgroundOpacity;
-
         var alpha = (byte)Math.Clamp(
-            opacity * 255.0,
+            Math.Max(
+                _settings.BackgroundOpacity,
+                0.94) *
+            255.0,
             0,
             255);
 
@@ -212,14 +190,15 @@ public partial class OverlayWindow : Window
                 verticalPadding,
                 horizontalPadding,
                 verticalPadding),
-            CornerRadius = new CornerRadius(
-                isLargeTextRegion ? 5 : 3),
-            Background = new SolidColorBrush(
-                Color.FromArgb(
-                    alpha,
-                    10,
-                    10,
-                    10)),
+            CornerRadius =
+                new CornerRadius(2),
+            Background =
+                new SolidColorBrush(
+                    Color.FromArgb(
+                        alpha,
+                        8,
+                        8,
+                        8)),
             Child = textBlock,
             IsHitTestVisible = false,
             ClipToBounds = true,
@@ -231,9 +210,15 @@ public partial class OverlayWindow : Window
                 boxWidth,
                 maximumHeight));
 
+        var measuredHeight = Math.Clamp(
+            border.DesiredSize.Height,
+            preferredHeight,
+            maximumHeight);
+
         var x =
             region.Bounds.X / dpiScale -
             horizontalPadding;
+
         var y =
             region.Bounds.Y / dpiScale -
             verticalPadding;
@@ -245,11 +230,6 @@ public partial class OverlayWindow : Window
                 2,
                 Width - boxWidth - 2));
 
-        var measuredHeight = Math.Clamp(
-            border.DesiredSize.Height,
-            preferredHeight,
-            maximumHeight);
-
         y = Math.Clamp(
             y,
             2,
@@ -257,9 +237,14 @@ public partial class OverlayWindow : Window
                 2,
                 Height - measuredHeight - 2));
 
-        Canvas.SetLeft(border, x);
-        Canvas.SetTop(border, y);
-        OverlayCanvas.Children.Add(border);
+        Canvas.SetLeft(
+            border,
+            x);
+        Canvas.SetTop(
+            border,
+            y);
+        OverlayCanvas.Children.Add(
+            border);
     }
 
     private static double FitFontSize(
