@@ -114,8 +114,12 @@ Coordinates use Unity's current render resolution and a top-left origin. The des
 
 ## Current limitations
 
-- This first adapter scans active `TextMeshProUGUI` and legacy `UnityEngine.UI.Text` objects every 200 ms.
+- The adapter scans active `TextMeshProUGUI` and legacy `UnityEngine.UI.Text` objects every 200 ms.
+- Transparent text hidden by `Graphic.color.a` or parent `CanvasGroup.alpha` is rejected before publishing.
+- Each region also carries its Unity object name and hierarchy path so the desktop app can classify dialogue-like text separately from status/UI noise.
+- Subtitle mode ranks likely dialogue/speaker/choice text and limits the number of translated regions; Replace mode remains broader.
+- Unity Adapter translation uses source language `auto` so mixed Japanese/English UI can be handled without tying it to the OCR language selector.
 - World-space text and unusual custom renderers may have imperfect rectangles.
-- CanvasGroup alpha/complex masking is not yet used to reject every visually hidden object.
+- Complex masks/clipping can still leave some visually hidden objects in the feed.
 - Games that do not use Unity UI/TextMeshPro still require OCR or a game-specific adapter.
 - The adapter project is intentionally not part of the main CI solution because it compiles against DLLs from the user's installed game. The desktop receiver and fallback pipeline are built by normal CI.
