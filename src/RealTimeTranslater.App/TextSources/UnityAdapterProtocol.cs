@@ -14,6 +14,11 @@ internal sealed class UnityAdapterRegionDto
     public string Kind { get; set; } = string.Empty;
     public string ObjectName { get; set; } = string.Empty;
     public string Hierarchy { get; set; } = string.Empty;
+    public string SelectableName { get; set; } = string.Empty;
+    public bool IsSelectable { get; set; }
+    public bool IsButton { get; set; }
+    public bool IsChoiceLike { get; set; }
+    public bool IsSpeakerLike { get; set; }
     public int X { get; set; }
     public int Y { get; set; }
     public int Width { get; set; }
