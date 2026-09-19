@@ -23,7 +23,8 @@ public sealed class TranslationCoordinator
         IReadOnlyList<TextRegion> regions,
         string sourceLanguage,
         string targetLanguage,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<string>? additionalContext = null)
     {
         var result = new List<TranslatedRegion>(regions.Count);
 
@@ -37,12 +38,20 @@ public sealed class TranslationCoordinator
 
             if (!_cache.TryGet(sourceLanguage, targetLanguage, text, out var translated))
             {
+                var requestContext =
+                    additionalContext is null ||
+                    additionalContext.Count == 0
+                        ? _context.ToArray()
+                        : _context
+                            .Concat(additionalContext)
+                            .ToArray();
+
                 translated = await _provider.TranslateAsync(
                     new TranslationRequest(
                         text,
                         sourceLanguage,
                         targetLanguage,
-                        _context.ToArray()),
+                        requestContext),
                     cancellationToken);
 
                 translated = translated.Trim();
