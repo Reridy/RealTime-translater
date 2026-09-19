@@ -161,8 +161,29 @@ public partial class OverlayWindow : Window
             NativeMethods.GwlExStyle,
             new IntPtr(current));
 
+        ApplyCaptureProtection();
+    }
+
+    public void SetAllowScreenshots(bool allowScreenshots)
+    {
+        _settings.AllowScreenshots = allowScreenshots;
+
+        if (!IsSourceInitialized)
+            return;
+
+        ApplyCaptureProtection();
+    }
+
+    private void ApplyCaptureProtection()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero)
+            return;
+
         _ = NativeMethods.SetWindowDisplayAffinity(
             handle,
-            NativeMethods.WdaExcludeFromCapture);
+            _settings.AllowScreenshots
+                ? NativeMethods.WdaNone
+                : NativeMethods.WdaExcludeFromCapture);
     }
 }
