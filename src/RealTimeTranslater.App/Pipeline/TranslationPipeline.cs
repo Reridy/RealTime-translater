@@ -33,6 +33,7 @@ public sealed class TranslationPipeline : IDisposable
     private DateTimeOffset _nextUnityTranslationRetryAt =
         DateTimeOffset.MinValue;
     private string? _lastUnityTranslationError;
+    private int _unityFailureCount;
 
     public TranslationPipeline(
         IntPtr targetWindow,
@@ -157,7 +158,7 @@ public sealed class TranslationPipeline : IDisposable
                                     .BuildTranslationContext(
                                         unitySnapshot);
 
-                            _lastUnityTranslations =
+                            var translated =
                                 await _translator.TranslateAsync(
                                     unityRegions,
                                     "auto",
@@ -170,9 +171,42 @@ public sealed class TranslationPipeline : IDisposable
                                     translationStart)
                                 .TotalMilliseconds;
 
-                            _lastUnityTextKey = unityTextKey;
+                            var latestKey = unityTextKey;
+
+                            if (_unityAdapterReceiver.TryGetLatest(
+                                    TimeSpan.FromSeconds(2),
+                                    out var latestSnapshot))
+                            {
+                                latestKey =
+                                    BuildUnityTextKey(
+                                        latestSnapshot);
+                            }
+
+                            if (!string.Equals(
+                                    latestKey,
+                                    unityTextKey,
+                                    StringComparison.Ordinal))
+                            {
+                                // The game advanced while translation was
+                                // running. Do not flash a stale subtitle over
+                                // the new line; the next loop translates the
+                                // latest snapshot immediately.
+                                _lastUnityTranslations =
+                                    Array.Empty<TranslatedRegion>();
+                                _lastUnityTextKey =
+                                    string.Empty;
+                            }
+                            else
+                            {
+                                _lastUnityTranslations =
+                                    translated;
+                                _lastUnityTextKey =
+                                    unityTextKey;
+                            }
+
                             _failedUnityTextKey = string.Empty;
                             _lastUnityTranslationError = null;
+                            _unityFailureCount = 0;
                         }
                         catch (OperationCanceledException)
                             when (cancellationToken.IsCancellationRequested)
@@ -184,10 +218,26 @@ public sealed class TranslationPipeline : IDisposable
                             _lastUnityTranslations =
                                 Array.Empty<TranslatedRegion>();
                             _lastUnityTextKey = string.Empty;
-                            _failedUnityTextKey = unityTextKey;
+
+                            if (string.Equals(
+                                    _failedUnityTextKey,
+                                    unityTextKey,
+                                    StringComparison.Ordinal))
+                            {
+                                _unityFailureCount++;
+                            }
+                            else
+                            {
+                                _failedUnityTextKey =
+                                    unityTextKey;
+                                _unityFailureCount = 1;
+                            }
+
                             _nextUnityTranslationRetryAt =
-                                DateTimeOffset.UtcNow
-                                    .AddSeconds(1.5);
+                                DateTimeOffset.UtcNow +
+                                UnityRetryDelay(
+                                    _unityFailureCount);
+
                             _lastUnityTranslationMilliseconds =
                                 Stopwatch.GetElapsedTime(
                                     translationStart)
@@ -217,6 +267,7 @@ public sealed class TranslationPipeline : IDisposable
                         Array.Empty<TranslatedRegion>();
                     _lastUnityTranslationMilliseconds = null;
                     _lastUnityTranslationError = null;
+                    _unityFailureCount = 0;
                 }
 
                 await _overlay.Dispatcher.InvokeAsync(() =>
@@ -238,7 +289,9 @@ public sealed class TranslationPipeline : IDisposable
                 var translationState =
                     _lastUnityTranslationError is null
                         ? latencyNote
-                        : $" · translation error, retrying: " +
+                        : $" · translation error " +
+                          $"(attempt {_unityFailureCount}, retry in " +
+                          $"{Math.Max(0, (_nextUnityTranslationRetryAt - DateTimeOffset.UtcNow).TotalMilliseconds):0} ms): " +
                           _lastUnityTranslationError;
 
                 StatusChanged?.Invoke(
@@ -345,6 +398,32 @@ public sealed class TranslationPipeline : IDisposable
     }
 
     public void Dispose() => _capture.Dispose();
+
+    private string BuildUnityTextKey(
+        UnityAdapterSnapshot snapshot)
+    {
+        var selected =
+            UnityAdapterTextSelector.Select(
+                snapshot,
+                _settings.Overlay.Mode,
+                _settings.UnityDialogueOnly);
+
+        return string.Join(
+            "\u001e",
+            selected.Select(region =>
+                region.Text.Trim()));
+    }
+
+    private static TimeSpan UnityRetryDelay(
+        int failureCount)
+        => failureCount switch
+        {
+            <= 1 => TimeSpan.FromMilliseconds(350),
+            2 => TimeSpan.FromMilliseconds(750),
+            3 => TimeSpan.FromSeconds(1.5),
+            4 => TimeSpan.FromSeconds(2.5),
+            _ => TimeSpan.FromSeconds(4)
+        };
 
     private static string SummarizeError(Exception ex)
     {
