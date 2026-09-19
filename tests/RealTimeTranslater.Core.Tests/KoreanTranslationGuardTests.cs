@@ -41,6 +41,18 @@ public sealed class KoreanTranslationGuardTests
     [InlineData(
         "This is normal.",
         "正常使用状态正常使用状态正常使用状态正常使用状态")]
+    [InlineData(
+        "W-Well... I don't really feel like I'm a noble.",
+        "와-와... 사실은 나는 왕족이라는 느낌이 Really... 별로 없어.")]
+    [InlineData(
+        "How is it? Have you arrived?",
+        "상태는怎么样? 도착하셨나요?")]
+    [InlineData(
+        "This is troubling.",
+        "이건 곤란하네요 ???")]
+    [InlineData(
+        "I see, amnesia can also have this kind of problem.",
+        "I see, amnesia can also have this kind of problem.")]
     public void RejectsLeakedOrMalformedOutput(
         string source,
         string candidate)
