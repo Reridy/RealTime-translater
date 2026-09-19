@@ -1,0 +1,23 @@
+{
+  "CaptureFps": 4,
+  "ChangeThreshold": 0.025,
+  "StabilityFrames": 2,
+  "OcrLanguage": "jpn+eng",
+  "OcrDataPath": "tessdata",
+  "MinimumOcrConfidence": 45.0,
+  "Translation": {
+    "Provider": "Mock",
+    "SourceLanguage": "ja",
+    "TargetLanguage": "ko",
+    "OllamaEndpoint": "http://localhost:11434",
+    "OllamaModel": "qwen2.5:7b",
+    "LibreTranslateEndpoint": "http://localhost:5000"
+  },
+  "Overlay": {
+    "Mode": "Replace",
+    "BackgroundOpacity": 0.78,
+    "FontSizeScale": 0.82,
+    "MinimumFontSize": 12.0,
+    "MaximumFontSize": 38.0
+  }
+}
