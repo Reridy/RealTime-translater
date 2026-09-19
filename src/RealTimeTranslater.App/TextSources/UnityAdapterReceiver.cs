@@ -1,5 +1,6 @@
 using System.IO;
-using System.IO.Pipes;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 
@@ -7,7 +8,7 @@ namespace RealTimeTranslater.App.TextSources;
 
 internal sealed class UnityAdapterReceiver
 {
-    internal const string PipeName = "RealTimeTranslater.UnityText.v1";
+    internal const int Port = 47851;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -24,62 +25,82 @@ internal sealed class UnityAdapterReceiver
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        while (!cancellationToken.IsCancellationRequested)
+        var listener = new TcpListener(IPAddress.Loopback, Port);
+
+        try
         {
-            try
+            listener.Start();
+
+            while (!cancellationToken.IsCancellationRequested)
             {
-                using var pipe = new NamedPipeServerStream(
-                    PipeName,
-                    PipeDirection.In,
-                    1,
-                    PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous);
+                TcpClient? client = null;
 
-                await pipe.WaitForConnectionAsync(cancellationToken);
-
-                using var reader = new StreamReader(
-                    pipe,
-                    new UTF8Encoding(false),
-                    detectEncodingFromByteOrderMarks: true,
-                    bufferSize: 8192,
-                    leaveOpen: true);
-
-                while (pipe.IsConnected &&
-                       !cancellationToken.IsCancellationRequested)
+                try
                 {
-                    var line = await reader.ReadLineAsync(cancellationToken);
-                    if (line is null)
-                        break;
+                    client = await listener.AcceptTcpClientAsync(cancellationToken);
+                    client.NoDelay = true;
 
-                    if (line.Length == 0 || line.Length > 1_000_000)
-                        continue;
+                    using (client)
+                    using (var stream = client.GetStream())
+                    using (var reader = new StreamReader(
+                        stream,
+                        new UTF8Encoding(false),
+                        detectEncodingFromByteOrderMarks: true,
+                        bufferSize: 8192,
+                        leaveOpen: false))
+                    {
+                        LastError = null;
 
-                    Receive(line);
+                        while (client.Connected &&
+                               !cancellationToken.IsCancellationRequested)
+                        {
+                            var line = await reader.ReadLineAsync(cancellationToken);
+                            if (line is null)
+                                break;
+
+                            if (line.Length == 0 || line.Length > 1_000_000)
+                                continue;
+
+                            Receive(line);
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                    when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (IOException ex)
+                {
+                    LastError = ex.Message;
+                }
+                catch (SocketException ex)
+                {
+                    LastError = ex.Message;
+                }
+                catch (Exception ex)
+                {
+                    LastError = ex.Message;
+                }
+                finally
+                {
+                    client?.Dispose();
+                }
+
+                try
+                {
+                    await Task.Delay(100, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                    when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
                 }
             }
-            catch (OperationCanceledException)
-                when (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
-            catch (IOException ex)
-            {
-                LastError = ex.Message;
-            }
-            catch (Exception ex)
-            {
-                LastError = ex.Message;
-            }
-
-            try
-            {
-                await Task.Delay(250, cancellationToken);
-            }
-            catch (OperationCanceledException)
-                when (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
+        }
+        finally
+        {
+            listener.Stop();
         }
     }
 
