@@ -1,5 +1,5 @@
 {
-  "CaptureFps": 4,
+  "CaptureFps": 8,
   "ChangeThreshold": 0.025,
   "StabilityFrames": 2,
   "OcrLanguage": "jpn+eng",
