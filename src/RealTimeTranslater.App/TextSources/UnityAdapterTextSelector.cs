@@ -40,7 +40,8 @@ internal static partial class UnityAdapterTextSelector
 
     internal static IReadOnlyList<UnityAdapterRegionDto> Select(
         UnityAdapterSnapshot snapshot,
-        string overlayMode)
+        string overlayMode,
+        bool dialogueOnly)
     {
         var sourceWidth = Math.Max(1, snapshot.Data.ScreenWidth);
         var sourceHeight = Math.Max(1, snapshot.Data.ScreenHeight);
@@ -51,7 +52,8 @@ internal static partial class UnityAdapterTextSelector
             .Select(group => group.First())
             .ToArray();
 
-        if (!string.Equals(
+        if (!dialogueOnly ||
+            !string.Equals(
                 overlayMode,
                 "Subtitle",
                 StringComparison.OrdinalIgnoreCase))
