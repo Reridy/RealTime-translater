@@ -58,6 +58,7 @@ public static partial class KoreanTranslationGuard
 
         var latinTokens = LatinWordRegex()
             .Matches(candidate)
+            .Cast<Match>()
             .Select(match => match.Value)
             .ToArray();
 
