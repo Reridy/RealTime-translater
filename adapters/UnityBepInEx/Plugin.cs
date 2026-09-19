@@ -123,6 +123,9 @@ public sealed class Plugin : BaseUnityPlugin
             return;
         }
 
+        if (!IsActuallyVisible(graphic))
+            return;
+
         var text = NormalizeText(rawText);
         if (string.IsNullOrEmpty(text))
             return;
@@ -137,11 +140,63 @@ public sealed class Plugin : BaseUnityPlugin
         {
             Text = text,
             Kind = kind,
+            ObjectName = graphic.gameObject.name ?? string.Empty,
+            Hierarchy = BuildHierarchyPath(graphic.transform),
             X = rect.X,
             Y = rect.Y,
             Width = rect.Width,
             Height = rect.Height
         });
+    }
+
+    private static bool IsActuallyVisible(Graphic graphic)
+    {
+        if (graphic.canvas == null || graphic.color.a <= 0.01f)
+            return false;
+
+        var effectiveAlpha = graphic.color.a;
+        var current = graphic.transform;
+
+        while (current != null)
+        {
+            var groups = current.GetComponents<CanvasGroup>();
+
+            for (var i = 0; i < groups.Length; i++)
+            {
+                var group = groups[i];
+                if (group == null)
+                    continue;
+
+                effectiveAlpha *= group.alpha;
+                if (effectiveAlpha <= 0.01f)
+                    return false;
+
+                if (group.ignoreParentGroups)
+                    return true;
+            }
+
+            current = current.parent;
+        }
+
+        return effectiveAlpha > 0.01f;
+    }
+
+    private static string BuildHierarchyPath(Transform transform)
+    {
+        if (transform == null)
+            return string.Empty;
+
+        var names = new List<string>(8);
+        var current = transform;
+
+        while (current != null && names.Count < 12)
+        {
+            names.Add(current.gameObject.name ?? string.Empty);
+            current = current.parent;
+        }
+
+        names.Reverse();
+        return string.Join("/", names.ToArray());
     }
 
     private static string NormalizeText(string value)
@@ -269,6 +324,10 @@ public sealed class Plugin : BaseUnityPlugin
             AppendJsonString(builder, region.Text);
             builder.Append("\",\"kind\":\"");
             AppendJsonString(builder, region.Kind);
+            builder.Append("\",\"objectName\":\"");
+            AppendJsonString(builder, region.ObjectName);
+            builder.Append("\",\"hierarchy\":\"");
+            AppendJsonString(builder, region.Hierarchy);
             builder.Append("\",\"x\":");
             builder.Append(region.X);
             builder.Append(",\"y\":");
@@ -332,6 +391,8 @@ public sealed class Plugin : BaseUnityPlugin
     {
         public string Text;
         public string Kind;
+        public string ObjectName;
+        public string Hierarchy;
         public int X;
         public int Y;
         public int Width;
