@@ -240,6 +240,18 @@ internal static partial class UnityAdapterTextSelector
                 japaneseCount >= 2
             );
 
+        var looksLikeBottomDialogue =
+            !region.IsSelectable &&
+            !hasSpeakerHint &&
+            !looksLikeShortHudLabel &&
+            region.Y >= screenHeight * 0.58 &&
+            region.Width >= screenWidth * 0.30 &&
+            text.Length is >= 2 and <= 180 &&
+            (
+                words is >= 1 and <= 18 ||
+                japaneseCount >= 2
+            );
+
         var labelLineCount =
             LabelLineRegex().Matches(text).Count;
         var bulletLineCount =
@@ -306,6 +318,7 @@ internal static partial class UnityAdapterTextSelector
             !isChoice &&
             !looksLikeSentence &&
             !looksLikeShortDialogue &&
+            !looksLikeBottomDialogue &&
             lineCount == 1 &&
             words is >= 1 and <= 3 &&
             text.Length <= 32;
@@ -337,7 +350,8 @@ internal static partial class UnityAdapterTextSelector
             (!region.IsSelectable &&
              (hasStrongDialogueHint ||
               looksLikeSentence ||
-              looksLikeShortDialogue));
+              looksLikeShortDialogue ||
+              looksLikeBottomDialogue));
 
         if (!isCandidate)
             return Reject(region);
@@ -367,6 +381,9 @@ internal static partial class UnityAdapterTextSelector
 
         if (looksLikeShortDialogue)
             score += 55;
+
+        if (looksLikeBottomDialogue)
+            score += 45;
 
         if (isLearnedTextObject)
             score += 90;
