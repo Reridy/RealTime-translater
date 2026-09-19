@@ -66,6 +66,38 @@ public sealed class TranslationCoordinatorTests
         Assert.Equal(1, provider.CallCount);
     }
 
+
+    [Fact]
+    public async Task UsesBatchProviderForMultipleCacheMisses()
+    {
+        var provider = new BatchCountingProvider();
+        var coordinator = new TranslationCoordinator(provider);
+
+        var result = await coordinator.TranslateAsync(
+            new[]
+            {
+                new TextRegion(
+                    "Krea: Tea?",
+                    new PixelRect(0, 0, 100, 20)),
+                new TextRegion(
+                    "Ramune: Perfect!",
+                    new PixelRect(0, 30, 100, 20))
+            },
+            "en",
+            "ko",
+            CancellationToken.None);
+
+        Assert.Equal(1, provider.BatchCallCount);
+        Assert.Equal(0, provider.SingleCallCount);
+        Assert.Equal(2, result.Count);
+        Assert.Equal(
+            "batch:Krea: Tea?",
+            result[0].TranslatedText);
+        Assert.Equal(
+            "batch:Ramune: Perfect!",
+            result[1].TranslatedText);
+    }
+
     [Fact]
     public async Task PassesRecentDialogueAsContext()
     {
@@ -97,6 +129,38 @@ public sealed class TranslationCoordinatorTests
         Assert.Contains(
             provider.LastContext,
             x => x.Contains("first", StringComparison.Ordinal));
+    }
+
+
+    private sealed class BatchCountingProvider :
+        IBatchTranslationProvider
+    {
+        public int SingleCallCount { get; private set; }
+        public int BatchCallCount { get; private set; }
+
+        public string Name => "BatchTest";
+
+        public Task<string> TranslateAsync(
+            TranslationRequest request,
+            CancellationToken cancellationToken)
+        {
+            SingleCallCount++;
+            return Task.FromResult(
+                $"single:{request.Text}");
+        }
+
+        public Task<IReadOnlyList<string>> TranslateBatchAsync(
+            IReadOnlyList<TranslationRequest> requests,
+            CancellationToken cancellationToken)
+        {
+            BatchCallCount++;
+
+            return Task.FromResult<IReadOnlyList<string>>(
+                requests
+                    .Select(request =>
+                        $"batch:{request.Text}")
+                    .ToArray());
+        }
     }
 
     private sealed class CountingProvider : ITranslationProvider
