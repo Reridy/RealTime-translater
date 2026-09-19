@@ -47,6 +47,9 @@ public partial class MainWindow : Window
             TextSourceComboBox.Items.Contains(_settings.TextSource)
                 ? _settings.TextSource
                 : "OCR";
+        UnityDialogueOnlyCheckBox.IsChecked =
+            _settings.UnityDialogueOnly;
+        UpdateUnityScopeAvailability();
 
         ProviderComboBox.ItemsSource = new[]
         {
@@ -118,6 +121,8 @@ public partial class MainWindow : Window
             _settings.TextSource =
                 TextSourceComboBox.SelectedItem?.ToString()
                 ?? "OCR";
+            _settings.UnityDialogueOnly =
+                UnityDialogueOnlyCheckBox.IsChecked == true;
             _settings.Overlay.Mode =
                 OverlayModeComboBox.SelectedItem?.ToString()
                 ?? "Replace";
@@ -204,6 +209,35 @@ public partial class MainWindow : Window
         var allowScreenshots = AllowScreenshotsCheckBox.IsChecked == true;
         _settings.Overlay.AllowScreenshots = allowScreenshots;
         _overlayWindow?.SetAllowScreenshots(allowScreenshots);
+    }
+
+    private void TextSourceComboBox_SelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (IsLoaded)
+            UpdateUnityScopeAvailability();
+    }
+
+    private void UnityDialogueOnlyCheckBox_Changed(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_settings is null)
+            return;
+
+        _settings.UnityDialogueOnly =
+            UnityDialogueOnlyCheckBox.IsChecked == true;
+    }
+
+    private void UpdateUnityScopeAvailability()
+    {
+        var useUnityAdapter = string.Equals(
+            TextSourceComboBox.SelectedItem?.ToString(),
+            "Unity Adapter + OCR fallback",
+            StringComparison.OrdinalIgnoreCase);
+
+        UnityDialogueOnlyCheckBox.IsEnabled = useUnityAdapter;
     }
 
     private void ProviderComboBox_SelectionChanged(
