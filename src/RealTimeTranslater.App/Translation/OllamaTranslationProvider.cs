@@ -15,6 +15,8 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
     private readonly HttpClient _httpClient;
     private readonly string _endpoint;
     private readonly string _model;
+    private readonly SemaphoreSlim _translationGate =
+        new(1, 1);
 
     public OllamaTranslationProvider(
         HttpClient httpClient,
@@ -54,6 +56,11 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
         TranslationRequest request,
         CancellationToken cancellationToken)
     {
+        await _translationGate.WaitAsync(
+            cancellationToken);
+
+        try
+        {
         using var translationBudget =
             CancellationTokenSource.CreateLinkedTokenSource(
                 cancellationToken);
@@ -96,6 +103,11 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
         {
             throw new TimeoutException(
                 "Translation exceeded the 25 second realtime budget.");
+        }
+        }
+        finally
+        {
+            _translationGate.Release();
         }
     }
 
