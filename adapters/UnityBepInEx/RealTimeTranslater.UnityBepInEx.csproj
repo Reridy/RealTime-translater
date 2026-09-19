@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>RealTimeTranslater.UnityBepInEx</AssemblyName>
+    <RootNamespace>RealTimeTranslater.UnityBepInEx</RootNamespace>
+    <GameDir Condition="'$(GameDir)' == ''">__GAME_DIR_NOT_SET__</GameDir>
+  </PropertyGroup>
+
+  <Target Name="ValidateGameDirectory"
+          BeforeTargets="ResolveReferences"
+          Condition="'$(GameDir)' == '__GAME_DIR_NOT_SET__'">
+    <Error Text="GameDir is required. Build with /p:GameDir=&quot;C:\path\to\game&quot;." />
+  </Target>
+
+  <ItemGroup>
+    <Reference Include="BepInEx">
+      <HintPath>$(GameDir)\BepInEx\core\BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GameDir)\Kurea Struggle_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(GameDir)\Kurea Struggle_Data\Managed\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>$(GameDir)\Kurea Struggle_Data\Managed\Unity.TextMeshPro.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
