@@ -8,6 +8,10 @@ namespace RealTimeTranslater.App.Translation;
 
 public sealed class OllamaTranslationProvider : ITranslationProvider
 {
+    private const int MaximumHttpAttempts = 3;
+    private static readonly TimeSpan RequestTimeout =
+        TimeSpan.FromSeconds(20);
+
     private readonly HttpClient _httpClient;
     private readonly string _endpoint;
     private readonly string _model;
@@ -29,6 +33,23 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
 
     public string Name => "Ollama";
 
+    public async Task WarmupAsync(
+        CancellationToken cancellationToken)
+    {
+        var payload = new
+        {
+            model = _model,
+            prompt = string.Empty,
+            stream = false,
+            keep_alive = "30m"
+        };
+
+        _ = await PostJsonWithRetriesAsync(
+            "/api/generate",
+            payload,
+            cancellationToken);
+    }
+
     public async Task<string> TranslateAsync(
         TranslationRequest request,
         CancellationToken cancellationToken)
@@ -39,50 +60,105 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
 
         if (IsTranslateGemmaModel(_model))
         {
-            var dedicated = await RequestTranslateGemmaAsync(
+            return await TranslateWithTranslateGemmaAsync(
                 request.Text,
                 sourceLanguage,
                 request.TargetLanguage,
                 cancellationToken);
-
-            dedicated = KoreanTranslationGuard.Normalize(dedicated);
-
-            if (KoreanTranslationGuard.IsAcceptable(
-                    request.Text,
-                    dedicated))
-            {
-                return dedicated;
-            }
-
-            throw new InvalidOperationException(
-                "TranslateGemma returned a malformed Korean translation.");
         }
 
-        var speakerContext = BuildSpeakerContext(request.Context);
+        return await TranslateWithGeneralModelAsync(
+            request,
+            sourceLanguage,
+            cancellationToken);
+    }
 
-        string? primary = null;
+    private async Task<string> TranslateWithTranslateGemmaAsync(
+        string sourceText,
+        string sourceLanguage,
+        string targetLanguage,
+        CancellationToken cancellationToken)
+    {
+        Exception? lastError = null;
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                var translated =
+                    await RequestTranslateGemmaAsync(
+                        sourceText,
+                        sourceLanguage,
+                        targetLanguage,
+                        strict: attempt > 0,
+                        cancellationToken);
+
+                translated =
+                    KoreanTranslationGuard.Normalize(
+                        translated);
+
+                if (KoreanTranslationGuard.IsAcceptable(
+                        sourceText,
+                        translated))
+                {
+                    return translated;
+                }
+
+                lastError = new InvalidOperationException(
+                    "TranslateGemma returned output that failed Korean quality validation.");
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+                when (ex is HttpRequestException or
+                    InvalidOperationException or
+                    TimeoutException)
+            {
+                lastError = ex;
+            }
+
+            if (attempt == 0)
+            {
+                await Task.Delay(
+                    120,
+                    cancellationToken);
+            }
+        }
+
+        throw new InvalidOperationException(
+            "TranslateGemma translation failed after retry: " +
+            (lastError?.Message ?? "unknown error"),
+            lastError);
+    }
+
+    private async Task<string> TranslateWithGeneralModelAsync(
+        TranslationRequest request,
+        string sourceLanguage,
+        CancellationToken cancellationToken)
+    {
+        var speakerContext =
+            BuildSpeakerContext(request.Context);
+
         Exception? primaryError = null;
 
         try
         {
-            primary = await RequestGeneralModelAsync(
-                request.Text,
-                sourceLanguage,
-                request.TargetLanguage,
-                speakerContext,
-                structuredOutput: true,
-                strict: false,
-                cancellationToken);
-        }
-        catch (Exception ex)
-            when (ex is HttpRequestException or InvalidOperationException)
-        {
-            primaryError = ex;
-        }
+            var primary =
+                await RequestGeneralModelAsync(
+                    request.Text,
+                    sourceLanguage,
+                    request.TargetLanguage,
+                    speakerContext,
+                    structuredOutput: true,
+                    strict: false,
+                    cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(primary))
-        {
-            primary = KoreanTranslationGuard.Normalize(primary);
+            primary =
+                KoreanTranslationGuard.Normalize(
+                    primary);
 
             if (KoreanTranslationGuard.IsAcceptable(
                     request.Text,
@@ -90,40 +166,41 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
             {
                 return primary;
             }
-        }
 
-        // Structured decoding can fail on some local Ollama/model
-        // combinations. Retry once with a minimal plain-text request and no
-        // dialogue history so a bad generation cannot poison the next line.
-        if (primaryError is HttpRequestException httpError &&
-            IsTransient(httpError.StatusCode))
+            primaryError =
+                new InvalidOperationException(
+                    "Structured translation failed Korean quality validation.");
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
         {
-            await Task.Delay(250, cancellationToken);
+            throw;
+        }
+        catch (Exception ex)
+            when (ex is HttpRequestException or
+                InvalidOperationException or
+                TimeoutException)
+        {
+            primaryError = ex;
         }
 
-        string? strict = null;
         Exception? strictError = null;
 
         try
         {
-            strict = await RequestGeneralModelAsync(
-                request.Text,
-                sourceLanguage,
-                request.TargetLanguage,
-                speakerContext: string.Empty,
-                structuredOutput: false,
-                strict: true,
-                cancellationToken);
-        }
-        catch (Exception ex)
-            when (ex is HttpRequestException or InvalidOperationException)
-        {
-            strictError = ex;
-        }
+            var strict =
+                await RequestGeneralModelAsync(
+                    request.Text,
+                    sourceLanguage,
+                    request.TargetLanguage,
+                    speakerContext: string.Empty,
+                    structuredOutput: false,
+                    strict: true,
+                    cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(strict))
-        {
-            strict = KoreanTranslationGuard.Normalize(strict);
+            strict =
+                KoreanTranslationGuard.Normalize(
+                    strict);
 
             if (KoreanTranslationGuard.IsAcceptable(
                     request.Text,
@@ -133,7 +210,9 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
             }
 
             var recovered =
-                KoreanTranslationGuard.RecoverBestKoreanLine(strict);
+                KoreanTranslationGuard
+                    .RecoverBestKoreanLine(
+                        strict);
 
             if (!string.IsNullOrWhiteSpace(recovered) &&
                 KoreanTranslationGuard.IsAcceptable(
@@ -142,15 +221,29 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
             {
                 return recovered;
             }
+
+            strictError =
+                new InvalidOperationException(
+                    "Strict translation failed Korean quality validation.");
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+            when (ex is HttpRequestException or
+                InvalidOperationException or
+                TimeoutException)
+        {
+            strictError = ex;
         }
 
-        var error =
-            strictError?.Message ??
-            primaryError?.Message ??
-            "The model returned malformed translation output.";
-
         throw new InvalidOperationException(
-            $"Ollama translation failed after validation/retry: {error}",
+            "Ollama translation failed after validation/retry: " +
+            (strictError?.Message ??
+             primaryError?.Message ??
+             "unknown error"),
             strictError ?? primaryError);
     }
 
@@ -158,21 +251,28 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
         string sourceText,
         string sourceLanguage,
         string targetLanguage,
+        bool strict,
         CancellationToken cancellationToken)
     {
-        var sourceName = LanguageName(sourceLanguage);
-        var targetName = LanguageName(targetLanguage);
+        var sourceName =
+            LanguageName(sourceLanguage);
+        var targetName =
+            LanguageName(targetLanguage);
 
-        var prompt =
-            $"You are a professional {sourceName} ({sourceLanguage}) to " +
-            $"{targetName} ({targetLanguage}) translator. " +
-            $"Your goal is to accurately convey the meaning and nuances of " +
-            $"the original {sourceName} text while adhering to " +
-            $"{targetName} grammar, vocabulary, and cultural sensitivities.\n" +
-            $"Produce only the {targetName} translation, without any " +
-            $"additional explanations or commentary. Please translate the " +
-            $"following {sourceName} text into {targetName}:\n\n\n" +
-            sourceText;
+        var prompt = strict
+            ? $"Translate the following {sourceName} text into {targetName}. " +
+              $"Output only the {targetName} translation. Do not explain, " +
+              $"repeat the source, continue the dialogue, or mix another language.\n\n" +
+              sourceText
+            : $"You are a professional {sourceName} ({sourceLanguage}) to " +
+              $"{targetName} ({targetLanguage}) translator. " +
+              $"Accurately convey the meaning, tone, hesitation, negation, " +
+              $"speaker intent, and nuances of the original text while using " +
+              $"natural {targetName}. Do not invent or omit information.\n" +
+              $"Produce only the {targetName} translation, without any " +
+              $"additional explanations or commentary. Please translate the " +
+              $"following {sourceName} text into {targetName}:\n\n\n" +
+              sourceText;
 
         var payload = new
         {
@@ -182,9 +282,13 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
             options = new
             {
                 temperature = 0.0,
-                num_ctx = 1024,
-                num_predict = OutputBudget(sourceText, 144),
-                repeat_penalty = 1.08
+                num_ctx = strict ? 768 : 1024,
+                num_predict =
+                    OutputBudget(
+                        sourceText,
+                        strict ? 192 : 256),
+                repeat_penalty =
+                    strict ? 1.12 : 1.08
             },
             messages = new object[]
             {
@@ -244,7 +348,8 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
             $"Source language: {sourceLanguage}\n" +
             $"Target language: {targetLanguage}\n";
 
-        if (!string.IsNullOrWhiteSpace(speakerContext))
+        if (!string.IsNullOrWhiteSpace(
+                speakerContext))
         {
             userText +=
                 $"Speaker context: {speakerContext}\n";
@@ -274,7 +379,8 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
                             type = "string"
                         }
                     },
-                    required = new[] { "translation" },
+                    required =
+                        new[] { "translation" },
                     additionalProperties = false
                 },
                 options = new
@@ -282,7 +388,10 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
                     temperature = 0.0,
                     top_p = 0.85,
                     num_ctx = 1024,
-                    num_predict = OutputBudget(sourceText, 144),
+                    num_predict =
+                        OutputBudget(
+                            sourceText,
+                            224),
                     repeat_penalty = 1.10
                 },
                 messages = new object[]
@@ -312,7 +421,10 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
                     temperature = 0.0,
                     top_p = 0.8,
                     num_ctx = 768,
-                    num_predict = OutputBudget(sourceText, 112),
+                    num_predict =
+                        OutputBudget(
+                            sourceText,
+                            176),
                     repeat_penalty = 1.14
                 },
                 messages = new object[]
@@ -340,15 +452,19 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
 
         try
         {
-            using var json = JsonDocument.Parse(raw);
+            using var json =
+                JsonDocument.Parse(raw);
 
-            if (json.RootElement.ValueKind == JsonValueKind.Object &&
+            if (json.RootElement.ValueKind ==
+                    JsonValueKind.Object &&
                 json.RootElement.TryGetProperty(
                     "translation",
                     out var translation) &&
-                translation.ValueKind == JsonValueKind.String)
+                translation.ValueKind ==
+                    JsonValueKind.String)
             {
-                return translation.GetString() ?? string.Empty;
+                return translation.GetString() ??
+                    string.Empty;
             }
         }
         catch (JsonException)
@@ -363,26 +479,14 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
         object payload,
         CancellationToken cancellationToken)
     {
-        using var response = await _httpClient.PostAsJsonAsync(
-            $"{_endpoint}/api/chat",
-            payload,
-            cancellationToken);
+        var body =
+            await PostJsonWithRetriesAsync(
+                "/api/chat",
+                payload,
+                cancellationToken);
 
-        var body = await response.Content.ReadAsStringAsync(
-            cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var detail = TryReadOllamaError(body);
-
-            throw new HttpRequestException(
-                $"Ollama {(int)response.StatusCode} " +
-                $"{response.ReasonPhrase}: {detail}",
-                inner: null,
-                response.StatusCode);
-        }
-
-        using var document = JsonDocument.Parse(body);
+        using var document =
+            JsonDocument.Parse(body);
 
         if (document.RootElement.TryGetProperty(
                 "message",
@@ -391,7 +495,8 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
                 "content",
                 out var content))
         {
-            var value = content.GetString()?.Trim();
+            var value =
+                content.GetString()?.Trim();
 
             if (!string.IsNullOrWhiteSpace(value))
                 return value;
@@ -402,25 +507,129 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
                 out var error))
         {
             throw new InvalidOperationException(
-                $"Ollama generation error: {error.GetString()}");
+                "Ollama generation error: " +
+                error.GetString());
         }
 
         throw new InvalidOperationException(
             "Ollama response did not contain message.content.");
     }
 
-    private static string TryReadOllamaError(string body)
+    private async Task<string> PostJsonWithRetriesAsync(
+        string path,
+        object payload,
+        CancellationToken cancellationToken)
+    {
+        Exception? lastError = null;
+
+        for (var attempt = 0;
+             attempt < MaximumHttpAttempts;
+             attempt++)
+        {
+            try
+            {
+                using var timeout =
+                    CancellationTokenSource
+                        .CreateLinkedTokenSource(
+                            cancellationToken);
+
+                timeout.CancelAfter(
+                    RequestTimeout);
+
+                using var response =
+                    await _httpClient
+                        .PostAsJsonAsync(
+                            _endpoint + path,
+                            payload,
+                            timeout.Token);
+
+                var body =
+                    await response.Content
+                        .ReadAsStringAsync(
+                            timeout.Token);
+
+                if (response.IsSuccessStatusCode)
+                    return body;
+
+                var detail =
+                    TryReadOllamaError(
+                        body);
+
+                var error =
+                    new HttpRequestException(
+                        $"Ollama {(int)response.StatusCode} " +
+                        $"{response.ReasonPhrase}: {detail}",
+                        inner: null,
+                        response.StatusCode);
+
+                lastError = error;
+
+                if (!IsTransient(
+                        response.StatusCode) ||
+                    attempt ==
+                        MaximumHttpAttempts - 1)
+                {
+                    throw error;
+                }
+            }
+            catch (OperationCanceledException)
+                when (!cancellationToken
+                    .IsCancellationRequested)
+            {
+                lastError =
+                    new TimeoutException(
+                        $"Ollama request exceeded {RequestTimeout.TotalSeconds:0}s.");
+
+                if (attempt ==
+                    MaximumHttpAttempts - 1)
+                {
+                    throw lastError;
+                }
+            }
+            catch (HttpRequestException ex)
+                when (attempt <
+                    MaximumHttpAttempts - 1 &&
+                    IsTransient(
+                        ex.StatusCode))
+            {
+                lastError = ex;
+            }
+
+            await Task.Delay(
+                RetryDelay(attempt),
+                cancellationToken);
+        }
+
+        throw lastError ??
+            new InvalidOperationException(
+                "Ollama request failed.");
+    }
+
+    private static TimeSpan RetryDelay(
+        int attempt)
+        => attempt switch
+        {
+            0 => TimeSpan.FromMilliseconds(180),
+            1 => TimeSpan.FromMilliseconds(550),
+            _ => TimeSpan.FromSeconds(1)
+        };
+
+    private static string TryReadOllamaError(
+        string body)
     {
         try
         {
-            using var json = JsonDocument.Parse(body);
+            using var json =
+                JsonDocument.Parse(body);
 
             if (json.RootElement.TryGetProperty(
                     "error",
                     out var error))
             {
-                return error.ValueKind == JsonValueKind.String
-                    ? error.GetString() ?? "unknown error"
+                return error.ValueKind ==
+                        JsonValueKind.String
+                    ? error.GetString() ??
+                        "unknown error"
                     : error.ToString();
             }
         }
@@ -476,7 +685,8 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
         return "auto";
     }
 
-    private static string LanguageName(string code)
+    private static string LanguageName(
+        string code)
         => code.ToLowerInvariant() switch
         {
             "en" => "English",
@@ -489,7 +699,9 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
         string sourceText,
         int maximum)
         => Math.Clamp(
-            sourceText.Length + 28,
+            (int)Math.Ceiling(
+                sourceText.Length * 1.35) +
+            28,
             48,
             maximum);
 
@@ -501,10 +713,11 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
 
     private static bool IsTransient(
         HttpStatusCode? status)
-        => status is
-            HttpStatusCode.InternalServerError or
-            HttpStatusCode.BadGateway or
-            HttpStatusCode.ServiceUnavailable or
-            HttpStatusCode.GatewayTimeout or
-            (HttpStatusCode)429;
+        => status is null ||
+            status is
+                HttpStatusCode.InternalServerError or
+                HttpStatusCode.BadGateway or
+                HttpStatusCode.ServiceUnavailable or
+                HttpStatusCode.GatewayTimeout or
+                (HttpStatusCode)429;
 }
