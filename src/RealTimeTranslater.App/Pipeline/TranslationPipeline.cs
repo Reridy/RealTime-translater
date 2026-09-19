@@ -8,7 +8,7 @@ using RealTimeTranslater.Core.Translation;
 
 namespace RealTimeTranslater.App.Pipeline;
 
-public sealed class TranslationPipeline
+public sealed class TranslationPipeline : IDisposable
 {
     private readonly IntPtr _targetWindow;
     private readonly WindowCaptureService _capture;
@@ -60,10 +60,13 @@ public sealed class TranslationPipeline
         {
             var loopStart = Stopwatch.GetTimestamp();
 
-            using var frame = _capture.Capture(_targetWindow);
+            using var frame = await _capture.CaptureAsync(
+                _targetWindow,
+                cancellationToken);
             if (frame is null)
             {
-                StatusChanged?.Invoke("Target window is minimized, hidden, or unavailable.");
+                StatusChanged?.Invoke(
+                    $"Running · {_capture.BackendName} · waiting for target frame...");
                 await DelayRemaining(loopStart, frameInterval, cancellationToken);
                 continue;
             }
@@ -94,19 +97,26 @@ public sealed class TranslationPipeline
                             frame.ScreenBounds,
                             frame.DpiScale));
 
+                    var fallbackNote =
+                        _capture.FallbackReason is null
+                            ? string.Empty
+                            : " · WGC unavailable, using GDI";
+
                     StatusChanged?.Invoke(
-                        $"Running · OCR {stableRegions.Count} line(s) · overlay {translated.Count} line(s)");
+                        $"Running · {_capture.BackendName}{fallbackNote} · OCR {stableRegions.Count} line(s) · overlay {translated.Count} line(s)");
                 }
                 else
                 {
                     StatusChanged?.Invoke(
-                        $"Running · stabilizing OCR ({regions.Count} line(s))");
+                        $"Running · {_capture.BackendName} · stabilizing OCR ({regions.Count} line(s))");
                 }
             }
 
             await DelayRemaining(loopStart, frameInterval, cancellationToken);
         }
     }
+
+    public void Dispose() => _capture.Dispose();
 
     private static async Task DelayRemaining(
         long loopStart,
