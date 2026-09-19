@@ -12,7 +12,7 @@
     "SourceLanguage": "ja",
     "TargetLanguage": "ko",
     "OllamaEndpoint": "http://localhost:11434",
-    "OllamaModel": "qwen2.5:7b",
+    "OllamaModel": "translategemma:4b",
     "LibreTranslateEndpoint": "http://localhost:5000"
   },
   "Overlay": {
