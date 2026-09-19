@@ -54,6 +54,15 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
         TranslationRequest request,
         CancellationToken cancellationToken)
     {
+        using var translationBudget =
+            CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken);
+
+        translationBudget.CancelAfter(
+            TimeSpan.FromSeconds(25));
+
+        try
+        {
         if (string.Equals(
                 request.TargetLanguage,
                 "ko",
@@ -74,13 +83,20 @@ public sealed class OllamaTranslationProvider : ITranslationProvider
                 request.Text,
                 sourceLanguage,
                 request.TargetLanguage,
-                cancellationToken);
+                translationBudget.Token);
         }
 
         return await TranslateWithGeneralModelAsync(
             request,
             sourceLanguage,
-            cancellationToken);
+            translationBudget.Token);
+        }
+        catch (OperationCanceledException)
+            when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                "Translation exceeded the 25 second realtime budget.");
+        }
     }
 
     private async Task<string> TranslateWithTranslateGemmaAsync(
