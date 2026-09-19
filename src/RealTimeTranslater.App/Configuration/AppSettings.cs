@@ -39,7 +39,7 @@ public sealed class TranslationSettings
     public string SourceLanguage { get; set; } = "ja";
     public string TargetLanguage { get; set; } = "ko";
     public string OllamaEndpoint { get; set; } = "http://localhost:11434";
-    public string OllamaModel { get; set; } = "qwen2.5:7b";
+    public string OllamaModel { get; set; } = "translategemma:4b";
     public string LibreTranslateEndpoint { get; set; } = "http://localhost:5000";
 }
 
