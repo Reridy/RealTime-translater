@@ -39,7 +39,7 @@ public partial class OverlayWindow : Window
                 "Subtitle",
                 StringComparison.OrdinalIgnoreCase))
         {
-            RenderSubtitle(regions);
+            RenderSubtitle(regions, dpiScale);
             return;
         }
 
@@ -124,7 +124,9 @@ public partial class OverlayWindow : Window
         OverlayCanvas.Children.Add(border);
     }
 
-    private void RenderSubtitle(IReadOnlyList<TranslatedRegion> regions)
+    private void RenderSubtitle(
+        IReadOnlyList<TranslatedRegion> regions,
+        double dpiScale)
     {
         if (regions.Count == 0)
             return;
@@ -200,10 +202,32 @@ public partial class OverlayWindow : Window
 
         border.Width = desiredWidth;
 
-        var left = Math.Max(12, (Width - desiredWidth) / 2);
-        var top = Math.Max(
+        var anchor = regions
+            .OrderByDescending(region => region.Bounds.Width)
+            .First();
+
+        var anchorLeft = anchor.Bounds.X / dpiScale;
+        var anchorTop = anchor.Bounds.Y / dpiScale;
+        var anchorWidth = anchor.Bounds.Width / dpiScale;
+        var anchorHeight = anchor.Bounds.Height / dpiScale;
+
+        var left = Math.Clamp(
+            anchorLeft + (anchorWidth - desiredWidth) / 2,
             12,
-            Height - desiredHeight - _settings.SubtitleBottomMargin);
+            Math.Max(12, Width - desiredWidth - 12));
+
+        var preferredInsideDialogue =
+            anchorHeight >= desiredHeight + 8 &&
+            anchorWidth >= Width * 0.35;
+
+        var top = preferredInsideDialogue
+            ? anchorTop + anchorHeight - desiredHeight - 4
+            : Height - desiredHeight - _settings.SubtitleBottomMargin;
+
+        top = Math.Clamp(
+            top,
+            12,
+            Math.Max(12, Height - desiredHeight - 12));
 
         Canvas.SetLeft(border, left);
         Canvas.SetTop(border, top);
