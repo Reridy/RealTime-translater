@@ -101,6 +101,7 @@ public sealed class TranslationPipeline : IDisposable
             while (!cancellationToken.IsCancellationRequested)
             {
                 var loopStart = Stopwatch.GetTimestamp();
+                var adapterSemanticOcrFallback = false;
 
                 using var frame = await _capture.CaptureAsync(
                     _targetWindow,
@@ -299,22 +300,19 @@ public sealed class TranslationPipeline : IDisposable
                         Array.Empty<TranslatedRegion>(),
                         frame);
 
+                    adapterSemanticOcrFallback = true;
+
                     var emptyScope =
                         _settings.UnityDialogueOnly
                             ? "dialogue/prose"
                             : "all text";
 
                     StatusChanged?.Invoke(
-                        $"Running · {_capture.BackendName} · Unity Adapter {emptyScope} · 0/{unitySnapshot.Data.Regions.Count} selected text region(s)");
-
-                    await DelayRemaining(
-                        loopStart,
-                        frameInterval,
-                        cancellationToken);
-                    continue;
+                        $"Running · {_capture.BackendName} · Unity Adapter {emptyScope} · 0/{unitySnapshot.Data.Regions.Count} selected text region(s) · semantic OCR fallback");
                 }
 
                 if (useUnityAdapter &&
+                    !adapterSemanticOcrFallback &&
                     _lastUnityAdapterSeenAt !=
                         DateTimeOffset.MinValue &&
                     DateTimeOffset.UtcNow -
@@ -365,6 +363,16 @@ public sealed class TranslationPipeline : IDisposable
                         _ocr.Recognize(
                             frame.Bitmap);
 
+                    if (adapterSemanticOcrFallback &&
+                        _settings.UnityDialogueOnly)
+                    {
+                        regions =
+                            SelectSemanticOcrRegions(
+                                regions,
+                                frame.Bitmap.Width,
+                                frame.Bitmap.Height);
+                    }
+
                     var stableRegions =
                         _stabilizer.Push(
                             regions);
@@ -392,9 +400,11 @@ public sealed class TranslationPipeline : IDisposable
                                     : " · WGC unavailable, using GDI";
 
                             var adapterNote =
-                                useUnityAdapter
-                                    ? " · Unity Adapter waiting, OCR fallback"
-                                    : string.Empty;
+                                adapterSemanticOcrFallback
+                                    ? " · Unity Adapter semantic OCR fallback"
+                                    : useUnityAdapter
+                                        ? " · Unity Adapter waiting, OCR fallback"
+                                        : string.Empty;
 
                             StatusChanged?.Invoke(
                                 $"Running · {_capture.BackendName}{fallbackNote}{adapterNote} · OCR {stableRegions.Count} line(s) · overlay {translated.Count} line(s)");
@@ -425,9 +435,11 @@ public sealed class TranslationPipeline : IDisposable
                     else
                     {
                         var adapterNote =
-                            useUnityAdapter
-                                ? " · Unity Adapter waiting, OCR fallback"
-                                : string.Empty;
+                            adapterSemanticOcrFallback
+                                ? " · Unity Adapter semantic OCR fallback"
+                                : useUnityAdapter
+                                    ? " · Unity Adapter waiting, OCR fallback"
+                                    : string.Empty;
 
                         StatusChanged?.Invoke(
                             $"Running · {_capture.BackendName}{adapterNote} · stabilizing OCR ({regions.Count} line(s))");
@@ -753,6 +765,127 @@ public sealed class TranslationPipeline : IDisposable
             "\u001e",
             selected.Select(region =>
                 region.Text.Trim()));
+    }
+
+    private static IReadOnlyList<TextRegion>
+        SelectSemanticOcrRegions(
+            IReadOnlyList<TextRegion> regions,
+            int frameWidth,
+            int frameHeight)
+    {
+        static bool EndsLikeSentence(string value)
+        {
+            var text = value
+                .Trim()
+                .TrimEnd(
+                    '"',
+                    '\'',
+                    '”',
+                    '’',
+                    ')',
+                    ']',
+                    '}');
+
+            return text.Length > 0 &&
+                text[^1] is
+                    '.' or
+                    '!' or
+                    '?' or
+                    '。' or
+                    '！' or
+                    '？' or
+                    '…';
+        }
+
+        static bool IsNavigationNoise(string value)
+        {
+            var normalized =
+                string.Join(
+                    " ",
+                    value
+                        .Trim()
+                        .ToLowerInvariant()
+                        .Split(
+                            (char[]?)null,
+                            StringSplitOptions.RemoveEmptyEntries));
+
+            return normalized is
+                "skip" or
+                "auto" or
+                "menu" or
+                "back" or
+                "close" or
+                "save" or
+                "load" or
+                "settings" or
+                "cond." or
+                "cond" or
+                "ap" or
+                "hp" or
+                "mp";
+        }
+
+        return regions
+            .Where(region =>
+            {
+                var text =
+                    region.Text.Trim();
+
+                if (text.Length < 12 ||
+                    IsNavigationNoise(text))
+                {
+                    return false;
+                }
+
+                var words =
+                    text.Split(
+                        (char[]?)null,
+                        StringSplitOptions.RemoveEmptyEntries)
+                    .Length;
+
+                var letters =
+                    text.Count(char.IsLetter);
+
+                var digits =
+                    text.Count(char.IsDigit);
+
+                var digitRatio =
+                    digits /
+                    (double)Math.Max(
+                        1,
+                        text.Length);
+
+                var japanese =
+                    text.Count(ch =>
+                        ch is >= '\u3040' and <= '\u30FF' ||
+                        ch is >= '\u3400' and <= '\u4DBF' ||
+                        ch is >= '\u4E00' and <= '\u9FFF');
+
+                var sentenceLike =
+                    EndsLikeSentence(text) ||
+                    words >= 5 ||
+                    japanese >= 6;
+
+                var wideEnough =
+                    region.Bounds.Width >=
+                        frameWidth * 0.18 ||
+                    text.Length >= 34;
+
+                var readable =
+                    letters >= 4 ||
+                    japanese >= 4;
+
+                return sentenceLike &&
+                    wideEnough &&
+                    readable &&
+                    digitRatio < 0.30;
+            })
+            .OrderBy(region =>
+                region.Bounds.Y)
+            .ThenBy(region =>
+                region.Bounds.X)
+            .Take(8)
+            .ToArray();
     }
 
     private static bool LooksCompleteForImmediateTranslation(
