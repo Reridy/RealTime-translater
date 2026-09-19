@@ -168,7 +168,8 @@ public partial class OverlayWindow : Window
     {
         _settings.AllowScreenshots = allowScreenshots;
 
-        if (!IsSourceInitialized)
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero)
             return;
 
         ApplyCaptureProtection();
