@@ -1,3 +1,4 @@
+using System.IO;
 using System.Drawing;
 using System.Drawing.Imaging;
 using RealTimeTranslater.Core.Models;
@@ -33,7 +34,7 @@ public sealed class TesseractOcrService : IDisposable
     public IReadOnlyList<TextRegion> Recognize(Bitmap frame)
     {
         using var stream = new MemoryStream();
-        frame.Save(stream, ImageFormat.Png);
+        frame.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
 
         using var pix = Pix.LoadFromMemory(stream.ToArray());
         using var page = _engine.Process(pix, PageSegMode.Auto);
