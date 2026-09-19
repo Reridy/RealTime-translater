@@ -85,6 +85,17 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <TextBlock VerticalAlignment="Center"
+                           Text="Text source" />
+                <ComboBox x:Name="TextSourceComboBox"
+                          Grid.Column="1"
+                          MinHeight="28" />
+            </Grid>
+            <Grid Margin="0,3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock VerticalAlignment="Center"
                            Text="Endpoint" />
                 <TextBox x:Name="EndpointTextBox"
                          Grid.Column="1"
@@ -147,7 +158,7 @@
                 <TextBlock Margin="0,12,0,0"
                            Foreground="Gray"
                            TextWrapping="Wrap"
-                           Text="Tip: use windowed/borderless mode. Enabling screenshots may let the OCR see its own overlay, so keep it off during normal use." />
+                           Text="Tip: Unity Adapter reads visible in-game text through a local BepInEx companion plugin and falls back to OCR if no adapter data arrives." />
             </StackPanel>
         </Border>
 
