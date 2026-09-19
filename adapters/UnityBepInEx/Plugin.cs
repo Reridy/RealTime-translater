@@ -13,7 +13,7 @@ namespace RealTimeTranslater.UnityBepInEx;
 [BepInPlugin(
     "com.realtimetranslater.unityadapter",
     "RealTimeTranslater Unity Adapter",
-    "0.1.0")]
+    "0.2.0")]
 public sealed class Plugin : BaseUnityPlugin
 {
     private const int MaximumRegions = 128;
@@ -34,7 +34,7 @@ public sealed class Plugin : BaseUnityPlugin
 
         StartCoroutine(PublishLoop());
         Logger.LogInfo(
-            "RealTimeTranslater Unity Adapter 0.1.0 loaded; read-only text capture enabled.");
+            "RealTimeTranslater Unity Adapter 0.2.0 loaded; read-only text capture enabled.");
     }
 
     private void OnDestroy()
@@ -136,12 +136,29 @@ public sealed class Plugin : BaseUnityPlugin
         if (rect.Width < 2 || rect.Height < 2)
             return;
 
+        var hierarchy = BuildHierarchyPath(graphic.transform);
+        var selectable = graphic.GetComponentInParent<Selectable>();
+        var selectableName =
+            selectable == null
+                ? string.Empty
+                : selectable.gameObject.name ?? string.Empty;
+
         regions.Add(new RegionPayload
         {
             Text = text,
             Kind = kind,
             ObjectName = graphic.gameObject.name ?? string.Empty,
-            Hierarchy = BuildHierarchyPath(graphic.transform),
+            Hierarchy = hierarchy,
+            SelectableName = selectableName,
+            IsSelectable = selectable != null,
+            IsButton = selectable is Button,
+            IsChoiceLike = IsChoiceLike(
+                graphic.gameObject.name,
+                hierarchy,
+                selectableName),
+            IsSpeakerLike = IsSpeakerLike(
+                graphic.gameObject.name,
+                hierarchy),
             X = rect.X,
             Y = rect.Y,
             Width = rect.Width,
@@ -197,6 +214,66 @@ public sealed class Plugin : BaseUnityPlugin
 
         names.Reverse();
         return string.Join("/", names.ToArray());
+    }
+
+    private static bool IsChoiceLike(
+        string objectName,
+        string hierarchy,
+        string selectableName)
+    {
+        var metadata =
+            ((objectName ?? string.Empty) + " " +
+             (hierarchy ?? string.Empty) + " " +
+             (selectableName ?? string.Empty))
+            .ToLowerInvariant();
+
+        return ContainsAny(
+            metadata,
+            "choice",
+            "answer",
+            "option",
+            "decision",
+            "response");
+    }
+
+    private static bool IsSpeakerLike(
+        string objectName,
+        string hierarchy)
+    {
+        var metadata =
+            ((objectName ?? string.Empty) + " " +
+             (hierarchy ?? string.Empty))
+            .ToLowerInvariant();
+
+        return ContainsAny(
+            metadata,
+            "speaker",
+            "speakername",
+            "nameplate",
+            "charactername",
+            "character_name",
+            "chara_name",
+            "talker",
+            "talkername",
+            "name_text",
+            "nametext");
+    }
+
+    private static bool ContainsAny(
+        string value,
+        params string[] needles)
+    {
+        for (var i = 0; i < needles.Length; i++)
+        {
+            if (value.IndexOf(
+                    needles[i],
+                    StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string NormalizeText(string value)
@@ -328,7 +405,17 @@ public sealed class Plugin : BaseUnityPlugin
             AppendJsonString(builder, region.ObjectName);
             builder.Append("\",\"hierarchy\":\"");
             AppendJsonString(builder, region.Hierarchy);
-            builder.Append("\",\"x\":");
+            builder.Append("\",\"selectableName\":\"");
+            AppendJsonString(builder, region.SelectableName);
+            builder.Append("\",\"isSelectable\":");
+            builder.Append(region.IsSelectable ? "true" : "false");
+            builder.Append(",\"isButton\":");
+            builder.Append(region.IsButton ? "true" : "false");
+            builder.Append(",\"isChoiceLike\":");
+            builder.Append(region.IsChoiceLike ? "true" : "false");
+            builder.Append(",\"isSpeakerLike\":");
+            builder.Append(region.IsSpeakerLike ? "true" : "false");
+            builder.Append(",\"x\":");
             builder.Append(region.X);
             builder.Append(",\"y\":");
             builder.Append(region.Y);
@@ -393,6 +480,11 @@ public sealed class Plugin : BaseUnityPlugin
         public string Kind;
         public string ObjectName;
         public string Hierarchy;
+        public string SelectableName;
+        public bool IsSelectable;
+        public bool IsButton;
+        public bool IsChoiceLike;
+        public bool IsSpeakerLike;
         public int X;
         public int Y;
         public int Width;
