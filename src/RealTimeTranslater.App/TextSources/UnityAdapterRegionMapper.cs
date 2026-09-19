@@ -7,6 +7,7 @@ internal static class UnityAdapterRegionMapper
 {
     internal static IReadOnlyList<TextRegion> Map(
         UnityAdapterSnapshot snapshot,
+        IReadOnlyList<UnityAdapterRegionDto> selectedRegions,
         CaptureFrame frame)
     {
         var sourceWidth = snapshot.Data.ScreenWidth;
@@ -25,9 +26,9 @@ internal static class UnityAdapterRegionMapper
         var scaleY = targetHeight / (double)sourceHeight;
 
         var result = new List<TextRegion>(
-            Math.Min(snapshot.Data.Regions.Count, 128));
+            Math.Min(selectedRegions.Count, 128));
 
-        foreach (var source in snapshot.Data.Regions.Take(128))
+        foreach (var source in selectedRegions.Take(128))
         {
             var text = source.Text?.Trim();
             if (string.IsNullOrWhiteSpace(text))
