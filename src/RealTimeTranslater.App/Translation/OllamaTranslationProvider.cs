@@ -9,8 +9,8 @@ namespace RealTimeTranslater.App.Translation;
 
 public sealed partial class OllamaTranslationProvider : ITranslationProvider
 {
-    private const int MaximumContextLines = 2;
-    private const int MaximumContextCharacters = 900;
+    private const int MaximumContextLines = 1;
+    private const int MaximumContextCharacters = 520;
 
     private readonly HttpClient _httpClient;
     private readonly string _endpoint;
@@ -39,24 +39,40 @@ public sealed partial class OllamaTranslationProvider : ITranslationProvider
     {
         var context = BuildContext(request.Context);
 
-        var translated = await RequestTranslationAsync(
+        var first = await RequestTranslationAsync(
             request,
             context,
             strictRetry: false,
             cancellationToken);
 
-        if (!IsSuspiciousTranslation(request.Text, translated))
-            return translated;
+        var normalized = NormalizeTranslation(first);
 
-        // Retry only when the first result contains role/meta leakage,
-        // non-Korean instruction text, or otherwise looks malformed.
-        translated = await RequestTranslationAsync(
+        if (!IsSuspiciousTranslation(request.Text, normalized))
+            return normalized;
+
+        // Bad local-model generations can occasionally leak role labels,
+        // Chinese meta text, or repeat a phrase until the token budget ends.
+        // Retry once with no history, lower temperature, and a tighter budget.
+        var retry = await RequestTranslationAsync(
             request,
             "(none)",
             strictRetry: true,
             cancellationToken);
 
-        return translated;
+        normalized = NormalizeTranslation(retry);
+
+        if (!IsSuspiciousTranslation(request.Text, normalized))
+            return normalized;
+
+        // Never paint runaway model garbage over the game. If even the strict
+        // retry is malformed, recover the cleanest Korean sentence we can.
+        var recovered = RecoverKoreanSentence(normalized);
+        if (!string.IsNullOrWhiteSpace(recovered))
+            return recovered;
+
+        // Last-resort fail-safe: keep the original readable rather than
+        // flooding the overlay with malformed generated text.
+        return request.Text;
     }
 
     private async Task<string> RequestTranslationAsync(
@@ -65,26 +81,24 @@ public sealed partial class OllamaTranslationProvider : ITranslationProvider
         bool strictRetry,
         CancellationToken cancellationToken)
     {
-        var outputBudget = Math.Clamp(
-            request.Text.Length * 3 + 48,
-            96,
-            strictRetry ? 192 : 256);
+        var outputBudget = strictRetry
+            ? Math.Clamp(request.Text.Length + 40, 64, 128)
+            : Math.Clamp(request.Text.Length * 2 + 36, 72, 160);
 
         var systemPrompt =
-            "You are a professional Korean game localizer. " +
-            "Translate ONLY the supplied source text into natural Korean. " +
-            "Preserve negation, who did what to whom, chronology, emotion, hesitation, emphasis, jokes, and character tone. " +
-            "Do not invent facts or reinterpret the scene. " +
+            "You are a Korean game localization translator. " +
+            "Translate ONLY the source text into natural Korean. " +
+            "Preserve the exact meaning: negation, subject/object relations, chronology, emotion, hesitation, emphasis, jokes, and character tone. " +
+            "Do not invent or omit information. " +
             "Use fluent spoken Korean for dialogue and concise standard Korean for UI. " +
-            "Preserve proper names consistently, numbers, placeholders, control tokens, and meaningful line breaks. " +
-            "Never output role labels such as user/assistant/system. " +
-            "Never output Chinese instructions, explanations, notes, alternatives, or commentary. " +
-            "Return exactly one JSON object with a single string field named translation.";
+            "Keep proper names consistent and preserve numbers/placeholders/control tokens. " +
+            "Do not output Chinese. Do not output role labels, explanations, notes, alternatives, or commentary. " +
+            "Return exactly one JSON object: {\"translation\":\"...\"}.";
 
         if (strictRetry)
         {
             systemPrompt +=
-                " This is a correction retry. Ignore all previous context and produce only the corrected Korean translation JSON.";
+                " Correction retry: ignore all previous context, translate the source once, and stop immediately after the JSON object.";
         }
 
         var payload = new
@@ -95,11 +109,11 @@ public sealed partial class OllamaTranslationProvider : ITranslationProvider
             format = "json",
             options = new
             {
-                temperature = strictRetry ? 0.05 : 0.12,
-                top_p = 0.85,
-                num_ctx = 1536,
+                temperature = strictRetry ? 0.0 : 0.08,
+                top_p = 0.8,
+                num_ctx = 1024,
                 num_predict = outputBudget,
-                repeat_penalty = 1.05
+                repeat_penalty = 1.12
             },
             messages = new object[]
             {
@@ -114,10 +128,9 @@ public sealed partial class OllamaTranslationProvider : ITranslationProvider
                     content =
                         $"Source language: {request.SourceLanguage}\n" +
                         $"Target language: {request.TargetLanguage}\n" +
-                        $"Recent localization context (reference only; never repeat it):\n{context}\n\n" +
-                        "SOURCE TEXT BEGIN\n" +
-                        request.Text +
-                        "\nSOURCE TEXT END"
+                        $"Context (reference only, never repeat): {context}\n" +
+                        "SOURCE:\n" +
+                        request.Text
                 }
             }
         };
@@ -154,7 +167,7 @@ public sealed partial class OllamaTranslationProvider : ITranslationProvider
                 "Ollama JSON response did not contain a translation.");
         }
 
-        return translated.Trim();
+        return translated;
     }
 
     private static string ParseStructuredTranslation(string rawContent)
@@ -176,30 +189,41 @@ public sealed partial class OllamaTranslationProvider : ITranslationProvider
         {
         }
 
-        // Some local models still wrap JSON in a code fence even when JSON
-        // mode is requested. Recover only the JSON object; never surface
-        // surrounding model chatter to the overlay.
         var match = JsonObjectRegex().Match(rawContent);
-        if (match.Success)
-        {
-            try
-            {
-                using var json = JsonDocument.Parse(match.Value);
+        if (!match.Success)
+            return string.Empty;
 
-                if (json.RootElement.TryGetProperty(
-                        "translation",
-                        out var translation) &&
-                    translation.ValueKind == JsonValueKind.String)
-                {
-                    return translation.GetString() ?? string.Empty;
-                }
-            }
-            catch (JsonException)
+        try
+        {
+            using var json = JsonDocument.Parse(match.Value);
+
+            if (json.RootElement.TryGetProperty(
+                    "translation",
+                    out var translation) &&
+                translation.ValueKind == JsonValueKind.String)
             {
+                return translation.GetString() ?? string.Empty;
             }
+        }
+        catch (JsonException)
+        {
         }
 
         return string.Empty;
+    }
+
+    private static string NormalizeTranslation(string value)
+    {
+        var text = value
+            .Replace("\r\n", "\n")
+            .Replace("\r", "\n")
+            .Trim();
+
+        text = RoleLeakRegex().Replace(text, string.Empty);
+        text = WhitespaceBeforeNewlineRegex().Replace(text, "\n");
+        text = ExcessBlankLinesRegex().Replace(text, "\n\n");
+
+        return text.Trim();
     }
 
     private static bool IsSuspiciousTranslation(
@@ -210,22 +234,95 @@ public sealed partial class OllamaTranslationProvider : ITranslationProvider
             return true;
 
         if (RoleLeakRegex().IsMatch(translated) ||
-            ChineseMetaRegex().IsMatch(translated))
+            ChineseMetaRegex().IsMatch(translated) ||
+            HasRunawayRepetition(translated))
         {
             return true;
         }
 
-        var hangul = translated.Count(ch =>
-            ch is >= '\uAC00' and <= '\uD7A3' ||
-            ch is >= '\u3131' and <= '\u318E');
-
-        // A sentence-length source should normally yield at least a little
-        // Hangul. Short names/tokens are allowed to remain non-Korean.
-        if (source.Length >= 18 && hangul == 0)
+        if (translated.Length >
+            Math.Max(source.Length * 2.6, source.Length + 140))
+        {
             return true;
+        }
+
+        var hangul = translated.Count(IsHangul);
+        var han = translated.Count(IsHan);
+
+        // Sentence-length output should be primarily Korean, not a long run of
+        // CJK ideographs from a degenerate multilingual generation.
+        if (source.Length >= 18)
+        {
+            if (hangul < 4)
+                return true;
+
+            if (han >= 8 && han > hangul / 2)
+                return true;
+        }
 
         return false;
     }
+
+    private static bool HasRunawayRepetition(string text)
+    {
+        if (RepeatedPhraseRegex().IsMatch(text))
+            return true;
+
+        var compact = WhitespaceRegex().Replace(text, " ");
+        if (compact.Length < 40)
+            return false;
+
+        var tokens = compact
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (tokens.Length < 8)
+            return false;
+
+        var mostCommon = tokens
+            .GroupBy(token => token, StringComparer.Ordinal)
+            .Max(group => group.Count());
+
+        return mostCommon >= 6 &&
+               mostCommon >= Math.Ceiling(tokens.Length * 0.35);
+    }
+
+    private static string RecoverKoreanSentence(string text)
+    {
+        var candidates = text
+            .Split(
+                new[] { '\n', '。', '！', '？' },
+                StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim())
+            .Where(line => line.Length >= 2)
+            .Select(line => new
+            {
+                Text = line,
+                Hangul = line.Count(IsHangul),
+                Han = line.Count(IsHan)
+            })
+            .Where(item =>
+                item.Hangul >= 3 &&
+                item.Han <= Math.Max(2, item.Hangul / 3))
+            .OrderByDescending(item => item.Hangul)
+            .FirstOrDefault();
+
+        if (candidates is null)
+            return string.Empty;
+
+        var clean = LongHanRunRegex().Replace(
+            candidates.Text,
+            string.Empty);
+
+        return clean.Trim();
+    }
+
+    private static bool IsHangul(char ch)
+        => ch is >= '\uAC00' and <= '\uD7A3'
+            or >= '\u3131' and <= '\u318E';
+
+    private static bool IsHan(char ch)
+        => ch is >= '\u3400' and <= '\u4DBF'
+            or >= '\u4E00' and <= '\u9FFF';
 
     private static string BuildContext(IReadOnlyList<string> context)
     {
@@ -246,7 +343,7 @@ public sealed partial class OllamaTranslationProvider : ITranslationProvider
         foreach (var line in lines)
         {
             if (builder.Length > 0)
-                builder.Append('\n');
+                builder.Append(' ');
 
             var remaining =
                 MaximumContextCharacters - builder.Length;
@@ -274,4 +371,19 @@ public sealed partial class OllamaTranslationProvider : ITranslationProvider
     [GeneratedRegex(
         @"[请纠正翻译最后一句韩语重新输出答案解释]")]
     private static partial Regex ChineseMetaRegex();
+
+    [GeneratedRegex(@"(.{2,12})\1{3,}")]
+    private static partial Regex RepeatedPhraseRegex();
+
+    [GeneratedRegex(@"[\u3400-\u4DBF\u4E00-\u9FFF]{5,}")]
+    private static partial Regex LongHanRunRegex();
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex WhitespaceRegex();
+
+    [GeneratedRegex(@"[ \t]+\n")]
+    private static partial Regex WhitespaceBeforeNewlineRegex();
+
+    [GeneratedRegex(@"\n{3,}")]
+    private static partial Regex ExcessBlankLinesRegex();
 }
