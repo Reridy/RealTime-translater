@@ -139,6 +139,15 @@ public sealed class TranslationPipeline : IDisposable
 
                     if (needsTranslation && !retryCoolingDown)
                     {
+                        if (_lastUnityTranslations.Count > 0)
+                        {
+                            await _overlay.Dispatcher.InvokeAsync(() =>
+                                _overlay.Render(
+                                    Array.Empty<TranslatedRegion>(),
+                                    frame.ScreenBounds,
+                                    frame.DpiScale));
+                        }
+
                         var translationStart = Stopwatch.GetTimestamp();
 
                         try
