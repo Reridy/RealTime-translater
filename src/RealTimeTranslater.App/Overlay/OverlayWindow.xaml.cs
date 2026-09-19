@@ -70,7 +70,10 @@ public partial class OverlayWindow : Window
 
         var textBlock = new TextBlock
         {
-            Text = region.TranslatedText,
+            Text = LimitOverlayText(
+                region.TranslatedText,
+                maxCharacters: 420,
+                maxLines: 5),
             Foreground = Brushes.White,
             FontWeight = FontWeights.SemiBold,
             FontSize = fontSize,
@@ -136,7 +139,10 @@ public partial class OverlayWindow : Window
         if (lines.Length == 0)
             return;
 
-        var text = string.Join("\n", lines);
+        var text = LimitOverlayText(
+            string.Join("\n", lines),
+            maxCharacters: 360,
+            maxLines: 4);
 
         var maxWidth = Math.Clamp(
             Width * _settings.SubtitleMaxWidthRatio,
@@ -202,6 +208,29 @@ public partial class OverlayWindow : Window
         Canvas.SetLeft(border, left);
         Canvas.SetTop(border, top);
         OverlayCanvas.Children.Add(border);
+    }
+
+    private static string LimitOverlayText(
+        string text,
+        int maxCharacters,
+        int maxLines)
+    {
+        var normalized = text
+            .Replace("\r\n", "\n")
+            .Replace("\r", "\n")
+            .Trim();
+
+        var lines = normalized
+            .Split('\n')
+            .Take(Math.Max(1, maxLines))
+            .ToArray();
+
+        var limited = string.Join("\n", lines);
+
+        if (limited.Length <= maxCharacters)
+            return limited;
+
+        return limited[..Math.Max(1, maxCharacters - 1)].TrimEnd() + "…";
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
