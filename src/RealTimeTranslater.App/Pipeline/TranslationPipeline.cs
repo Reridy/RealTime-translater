@@ -275,7 +275,7 @@ public sealed class TranslationPipeline : IDisposable
 
                         var unityScope =
                             _settings.UnityDialogueOnly
-                                ? "dialogue/prose"
+                                ? "smart"
                                 : "all text";
 
                         var state =
@@ -304,7 +304,7 @@ public sealed class TranslationPipeline : IDisposable
 
                     var emptyScope =
                         _settings.UnityDialogueOnly
-                            ? "dialogue/prose"
+                            ? "smart"
                             : "all text";
 
                     StatusChanged?.Invoke(
