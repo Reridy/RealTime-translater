@@ -62,6 +62,17 @@ public static partial class KoreanTranslationGuard
         if (han > 0)
             return false;
 
+        var sourceLetters = source.Count(char.IsLetter);
+        var candidateLetters = candidate.Count(char.IsLetter);
+
+        // Catch truncated long-paragraph generations. Korean is often more
+        // compact than English/Japanese, so keep this threshold conservative.
+        if (sourceLetters >= 70 &&
+            candidateLetters < Math.Max(18, sourceLetters * 0.24))
+        {
+            return false;
+        }
+
         var latinTokens = LatinWordRegex()
             .Matches(candidate)
             .Cast<Match>()
@@ -116,7 +127,8 @@ public static partial class KoreanTranslationGuard
             return true;
 
         if (token.Length <= 6 &&
-            token.All(ch => char.IsUpper(ch) || char.IsDigit(ch)))
+            token.All(ch => char.IsUpper(ch) || char.IsDigit(ch)) &&
+            source.Contains(token, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
