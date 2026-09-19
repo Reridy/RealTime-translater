@@ -245,7 +245,6 @@ internal sealed class WindowsGraphicsCaptureBackend : IDisposable
         _disposed = true;
         _session.Dispose();
         _framePool.Dispose();
-        _item.Dispose();
         _device.Dispose();
     }
 }
