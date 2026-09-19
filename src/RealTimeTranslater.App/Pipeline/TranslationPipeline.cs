@@ -100,8 +100,14 @@ public sealed class TranslationPipeline : IDisposable
                     TimeSpan.FromSeconds(2),
                     out var unitySnapshot))
             {
+                var selectedUnityRegions =
+                    UnityAdapterTextSelector.Select(
+                        unitySnapshot,
+                        _settings.Overlay.Mode);
+
                 var unityRegions = UnityAdapterRegionMapper.Map(
                     unitySnapshot,
+                    selectedUnityRegions,
                     frame);
 
                 if (unityRegions.Count > 0)
@@ -119,7 +125,7 @@ public sealed class TranslationPipeline : IDisposable
                         _lastUnityTranslations =
                             await _translator.TranslateAsync(
                                 unityRegions,
-                                _sourceLanguage,
+                                "auto",
                                 _targetLanguage,
                                 cancellationToken);
 
@@ -136,22 +142,28 @@ public sealed class TranslationPipeline : IDisposable
                                     })
                                 .ToArray();
                     }
-
-                    await _overlay.Dispatcher.InvokeAsync(() =>
-                        _overlay.Render(
-                            _lastUnityTranslations,
-                            frame.ScreenBounds,
-                            frame.DpiScale));
-
-                    StatusChanged?.Invoke(
-                        $"Running · {_capture.BackendName} · Unity Adapter {_lastUnityTranslations.Count} text region(s)");
-
-                    await DelayRemaining(
-                        loopStart,
-                        frameInterval,
-                        cancellationToken);
-                    continue;
                 }
+                else
+                {
+                    _lastUnityTextKey = string.Empty;
+                    _lastUnityTranslations =
+                        Array.Empty<TranslatedRegion>();
+                }
+
+                await _overlay.Dispatcher.InvokeAsync(() =>
+                    _overlay.Render(
+                        _lastUnityTranslations,
+                        frame.ScreenBounds,
+                        frame.DpiScale));
+
+                StatusChanged?.Invoke(
+                    $"Running · {_capture.BackendName} · Unity Adapter {unityRegions.Count}/{unitySnapshot.Data.Regions.Count} selected text region(s)");
+
+                await DelayRemaining(
+                    loopStart,
+                    frameInterval,
+                    cancellationToken);
+                continue;
             }
 
             var changed = _changeDetector.HasSignificantChange(frame.Bitmap);
