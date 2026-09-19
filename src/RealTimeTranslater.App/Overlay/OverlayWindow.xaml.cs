@@ -53,10 +53,20 @@ public partial class OverlayWindow : Window
     {
         var width = Math.Max(24, region.Bounds.Width / dpiScale);
         var height = Math.Max(16, region.Bounds.Height / dpiScale);
-        var fontSize = Math.Clamp(
-            height * _settings.FontSizeScale,
-            _settings.MinimumFontSize,
-            _settings.MaximumFontSize);
+
+        var looksLikeDialogueRegion =
+            width >= Width * 0.45 &&
+            height >= Math.Max(36, Height * 0.055);
+
+        var fontSize = looksLikeDialogueRegion
+            ? Math.Clamp(
+                height * 0.28,
+                Math.Max(14, _settings.MinimumFontSize),
+                Math.Min(28, _settings.MaximumFontSize))
+            : Math.Clamp(
+                height * _settings.FontSizeScale,
+                _settings.MinimumFontSize,
+                _settings.MaximumFontSize);
 
         var textBlock = new TextBlock
         {
@@ -66,11 +76,25 @@ public partial class OverlayWindow : Window
             FontSize = fontSize,
             TextWrapping = TextWrapping.Wrap,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            VerticalAlignment = VerticalAlignment.Center
+            VerticalAlignment = VerticalAlignment.Center,
+            LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+            LineHeight = fontSize * 1.22,
+            Effect = looksLikeDialogueRegion
+                ? new DropShadowEffect
+                {
+                    BlurRadius = 3,
+                    ShadowDepth = 1,
+                    Opacity = 0.85
+                }
+                : null
         };
 
+        var opacity = looksLikeDialogueRegion
+            ? Math.Max(_settings.BackgroundOpacity, 0.93)
+            : _settings.BackgroundOpacity;
+
         var alpha = (byte)Math.Clamp(
-            _settings.BackgroundOpacity * 255.0,
+            opacity * 255.0,
             0,
             255);
 
@@ -78,11 +102,16 @@ public partial class OverlayWindow : Window
         {
             Width = width,
             MinHeight = height,
-            MaxHeight = Math.Max(height * 2.4, height + 4),
-            Padding = new Thickness(3, 1, 3, 1),
-            CornerRadius = new CornerRadius(3),
+            MaxHeight = looksLikeDialogueRegion
+                ? Math.Max(height * 1.25, height + 8)
+                : Math.Max(height * 2.4, height + 4),
+            Padding = looksLikeDialogueRegion
+                ? new Thickness(8, 4, 8, 5)
+                : new Thickness(3, 1, 3, 1),
+            CornerRadius = new CornerRadius(
+                looksLikeDialogueRegion ? 5 : 3),
             Background = new SolidColorBrush(
-                Color.FromArgb(alpha, 12, 12, 12)),
+                Color.FromArgb(alpha, 10, 10, 10)),
             Child = textBlock,
             IsHitTestVisible = false
         };
