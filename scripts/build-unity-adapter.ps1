@@ -11,7 +11,10 @@ $project = Join-Path $repo "adapters\UnityBepInEx\RealTimeTranslater.UnityBepInE
 
 $required = @(
     "BepInEx\core\BepInEx.dll",
+    "Kurea Struggle_Data\Managed\UnityEngine.dll",
     "Kurea Struggle_Data\Managed\UnityEngine.CoreModule.dll",
+    "Kurea Struggle_Data\Managed\UnityEngine.UIModule.dll",
+    "Kurea Struggle_Data\Managed\UnityEngine.TextRenderingModule.dll",
     "Kurea Struggle_Data\Managed\UnityEngine.UI.dll",
     "Kurea Struggle_Data\Managed\Unity.TextMeshPro.dll"
 )
