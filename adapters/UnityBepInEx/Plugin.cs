@@ -74,7 +74,7 @@ public sealed class Plugin : BaseUnityPlugin
     {
         var regions = new List<RegionPayload>(MaximumRegions);
 
-        var tmpTexts = Resources.FindObjectsOfTypeAll<TMP_Text>();
+        var tmpTexts = Resources.FindObjectsOfTypeAll<TextMeshProUGUI>();
         for (var i = 0;
              i < tmpTexts.Length && regions.Count < MaximumRegions;
              i++)
