@@ -9,6 +9,7 @@ public sealed class AppSettings
     public double ChangeThreshold { get; set; } = 0.025;
     public int StabilityFrames { get; set; } = 2;
     public string OcrLanguage { get; set; } = "jpn+eng";
+    public string TextSource { get; set; } = "OCR";
     public string OcrDataPath { get; set; } = "tessdata";
     public float MinimumOcrConfidence { get; set; } = 45f;
     public TranslationSettings Translation { get; set; } = new();
