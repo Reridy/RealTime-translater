@@ -85,6 +85,21 @@ internal static partial class UnityAdapterTextSelector
             "next"
         };
 
+    internal static IReadOnlyList<string> BuildTranslationContext(
+        UnityAdapterSnapshot snapshot)
+    {
+        var speaker = snapshot.Data.Regions
+            .Where(region =>
+                region.IsSpeakerLike &&
+                !string.IsNullOrWhiteSpace(region.Text))
+            .Select(region => region.Text.Trim())
+            .FirstOrDefault();
+
+        return speaker is null
+            ? Array.Empty<string>()
+            : new[] { $"Current speaker: {speaker}" };
+    }
+
     internal static IReadOnlyList<UnityAdapterRegionDto> Select(
         UnityAdapterSnapshot snapshot,
         string overlayMode,
