@@ -227,7 +227,7 @@ public sealed class TranslationPipeline : IDisposable
 
                 var unityScope =
                     _settings.UnityDialogueOnly
-                        ? "dialogue"
+                        ? "dialogue/prose"
                         : "all text";
 
                 var latencyNote =
