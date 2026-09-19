@@ -28,11 +28,16 @@ internal static partial class UnityAdapterTextSelector
         "choice", "answer", "option", "decision", "response"
     };
 
-    private static readonly string[] StructuredUiMetadataHints =
+    private static readonly string[] HardStructuredUiMetadataHints =
     {
-        "tooltip", "description", "detail", "status", "build",
-        "slot", "inventory", "item", "skill", "parameter",
-        "stat", "help", "setting", "menu"
+        "status", "build", "slot", "inventory", "item",
+        "skill", "parameter", "stat", "setting", "menu"
+    };
+
+    private static readonly string[] ProseMetadataHints =
+    {
+        "description", "detail", "help", "lore", "profile",
+        "flavor", "explanation", "information", "info", "bio"
     };
 
     private static readonly string[] UiNoiseHints =
@@ -208,12 +213,44 @@ internal static partial class UnityAdapterTextSelector
                 (japaneseCount >= 8 && text.Length >= 16)
             );
 
+        var labelLineCount =
+            LabelLineRegex().Matches(text).Count;
+        var bulletLineCount =
+            BulletLineRegex().Matches(text).Count;
+        var uiNoiseCount =
+            UiNoiseHints.Count(lowered.Contains);
+        var digitCount = text.Count(char.IsDigit);
+        var letterCount = text.Count(char.IsLetter);
+        var digitRatio =
+            text.Length == 0
+                ? 0
+                : digitCount / (double)text.Length;
+
+        var hasProseMetadataHint =
+            ProseMetadataHints.Any(metadata.Contains);
+
+        var looksLikeProseBlock =
+            !region.IsSelectable &&
+            !looksLikeShortHudLabel &&
+            words >= 7 &&
+            text.Length >= 36 &&
+            digitRatio < 0.18 &&
+            bulletLineCount == 0 &&
+            labelLineCount <= 1 &&
+            uiNoiseCount <= 1 &&
+            (
+                hasSentenceEnding ||
+                hasJapaneseSentencePunctuation ||
+                SentencePunctuationRegex().Matches(text).Count >= 2 ||
+                hasProseMetadataHint
+            );
+
         var looksStructuredUi =
-            StructuredUiMetadataHints.Any(metadata.Contains) ||
-            lineCount >= 5 ||
-            LabelLineRegex().Matches(text).Count >= 2 ||
-            BulletLineRegex().Matches(text).Count >= 2 ||
-            UiNoiseHints.Count(lowered.Contains) >= 2;
+            HardStructuredUiMetadataHints.Any(metadata.Contains) ||
+            lineCount >= 6 ||
+            labelLineCount >= 2 ||
+            bulletLineCount >= 2 ||
+            uiNoiseCount >= 2;
 
         if (hasSpeakerHint || looksLikeShortHudLabel)
             return Reject(region);
@@ -248,8 +285,12 @@ internal static partial class UnityAdapterTextSelector
         if (looksLikeNameOnly)
             return Reject(region);
 
-        if (looksStructuredUi && !isChoice)
+        if (looksStructuredUi &&
+            !isChoice &&
+            !looksLikeProseBlock)
+        {
             return Reject(region);
+        }
 
         var probableChoiceButton =
             region.IsSelectable &&
@@ -259,6 +300,7 @@ internal static partial class UnityAdapterTextSelector
         var isCandidate =
             isChoice ||
             probableChoiceButton ||
+            looksLikeProseBlock ||
             (!region.IsSelectable &&
              (hasStrongDialogueHint || looksLikeSentence));
 
@@ -285,6 +327,12 @@ internal static partial class UnityAdapterTextSelector
         if (text.Length >= 30)
             score += 20;
 
+        if (looksLikeProseBlock)
+            score += 70;
+
+        if (hasProseMetadataHint)
+            score += 20;
+
         if (japaneseCount >= 8)
             score += 20;
 
@@ -299,9 +347,6 @@ internal static partial class UnityAdapterTextSelector
 
         if (UiNoiseHints.Any(lowered.Contains))
             score -= 35;
-
-        var digitCount = text.Count(char.IsDigit);
-        var letterCount = text.Count(char.IsLetter);
 
         if (digitCount > 0 && letterCount <= 4)
             score -= 50;
@@ -392,6 +437,9 @@ internal static partial class UnityAdapterTextSelector
 
     [GeneratedRegex("[！？。…]")]
     private static partial Regex JapaneseSentencePunctuationRegex();
+
+    [GeneratedRegex("[.!?！？。…]")]
+    private static partial Regex SentencePunctuationRegex();
 
     [GeneratedRegex(@"(?m)^\s*[\p{L}\p{N} _-]{2,24}:")]
     private static partial Regex LabelLineRegex();
