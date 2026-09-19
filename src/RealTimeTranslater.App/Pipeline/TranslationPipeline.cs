@@ -37,6 +37,8 @@ public sealed class TranslationPipeline : IDisposable
     private string _pendingUnityTextKey = string.Empty;
     private DateTimeOffset _pendingUnityTextSince =
         DateTimeOffset.MinValue;
+    private DateTimeOffset _lastUnityAdapterSeenAt =
+        DateTimeOffset.MinValue;
 
     public TranslationPipeline(
         IntPtr targetWindow,
@@ -109,6 +111,8 @@ public sealed class TranslationPipeline : IDisposable
                     TimeSpan.FromSeconds(2),
                     out var unitySnapshot))
             {
+                _lastUnityAdapterSeenAt =
+                    DateTimeOffset.UtcNow;
                 var selectedUnityRegions =
                     UnityAdapterTextSelector.Select(
                         unitySnapshot,
@@ -350,6 +354,35 @@ public sealed class TranslationPipeline : IDisposable
 
                 StatusChanged?.Invoke(
                     $"Running · {_capture.BackendName} · Unity Adapter {unityScope} · {unityRegions.Count}/{unitySnapshot.Data.Regions.Count} selected text region(s){translationState}");
+
+                await DelayRemaining(
+                    loopStart,
+                    frameInterval,
+                    cancellationToken);
+                continue;
+            }
+
+            if (useUnityAdapter &&
+                _lastUnityAdapterSeenAt != DateTimeOffset.MinValue &&
+                DateTimeOffset.UtcNow -
+                    _lastUnityAdapterSeenAt <
+                    TimeSpan.FromSeconds(5))
+            {
+                await _overlay.Dispatcher.InvokeAsync(() =>
+                    _overlay.Render(
+                        Array.Empty<TranslatedRegion>(),
+                        frame.ScreenBounds,
+                        frame.DpiScale));
+
+                var receiverError =
+                    string.IsNullOrWhiteSpace(
+                        _unityAdapterReceiver.LastError)
+                        ? string.Empty
+                        : " · " +
+                          _unityAdapterReceiver.LastError;
+
+                StatusChanged?.Invoke(
+                    $"Running · {_capture.BackendName} · Unity Adapter reconnecting{receiverError}");
 
                 await DelayRemaining(
                     loopStart,
