@@ -301,6 +301,7 @@ internal static partial class UnityAdapterTextSelector
         var looksLikeNameOnly =
             !isChoice &&
             !looksLikeSentence &&
+            !looksLikeShortDialogue &&
             lineCount == 1 &&
             words is >= 1 and <= 3 &&
             text.Length <= 32;
