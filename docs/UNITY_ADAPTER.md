@@ -83,7 +83,7 @@ If the status instead says `Unity Adapter waiting, OCR fallback`, check:
 for:
 
 ```
-RealTimeTranslater Unity Adapter 0.1.0 loaded; read-only text capture enabled.
+RealTimeTranslater Unity Adapter 0.2.0 loaded; read-only text capture enabled.
 ```
 
 ## Protocol
@@ -101,6 +101,13 @@ Example:
     {
       "text": "Hidden Stats",
       "kind": "TMP",
+      "objectName": "DialogueBody",
+      "hierarchy": "Canvas/DialoguePanel/DialogueBody",
+      "selectableName": "",
+      "isSelectable": false,
+      "isButton": false,
+      "isChoiceLike": false,
+      "isSpeakerLike": false,
       "x": 120,
       "y": 210,
       "width": 180,
@@ -116,7 +123,7 @@ Coordinates use Unity's current render resolution and a top-left origin. The des
 
 - The adapter scans active `TextMeshProUGUI` and legacy `UnityEngine.UI.Text` objects every 200 ms.
 - Transparent text hidden by `Graphic.color.a` or parent `CanvasGroup.alpha` is rejected before publishing.
-- Each region also carries its Unity object name and hierarchy path so the desktop app can classify dialogue-like text separately from status/UI noise.
+- Each region also carries its Unity object name and hierarchy path, plus real Unity `Selectable`/`Button` ancestry. The adapter marks choice-like and speaker-like objects so the desktop app can distinguish dialogue text from SKIP/AUTO controls and nameplates.
 - The desktop UI exposes a **Translate dialogue / choices only** checkbox for Unity Adapter mode. When checked, dialogue/choice filtering is used in both Subtitle and Replace modes. When unchecked, all meaningful visible Unity UI text is translated (up to the safety cap).
 - Dialogue-only mode is intentionally conservative: it rejects tooltip/stat blocks, short name-only strings, and common menu/status noise, then ranks likely dialogue/choice sentences.
 - Unity Adapter translation uses source language `auto` so mixed Japanese/English UI can be handled without tying it to the OCR language selector.
