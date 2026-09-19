@@ -2,7 +2,7 @@
 
 The Unity adapter is an optional read-only companion plugin for Unity Mono games that already use BepInEx.
 
-It does not modify dialogue, patch methods, write game memory, alter saves, or replace TextMeshPro text. It only enumerates active Unity UI text objects and publishes their current text plus screen rectangle to RealTime Translater through a local Windows named pipe.
+It does not modify dialogue, patch methods, write game memory, alter saves, or replace TextMeshPro text. It only enumerates active Unity UI text objects and publishes their current text plus screen rectangle to RealTime Translater through a localhost TCP connection.
 
 ## Why use it
 
@@ -14,7 +14,7 @@ Data flow:
 Unity game
   -> active TextMeshProUGUI / UnityEngine.UI.Text
   -> RealTimeTranslater.UnityBepInEx
-  -> local named pipe: RealTimeTranslater.UnityText.v1
+  -> localhost TCP: 127.0.0.1:47851
   -> RealTime Translater
   -> translation provider
   -> overlay
@@ -88,7 +88,7 @@ RealTimeTranslater Unity Adapter 0.1.0 loaded; read-only text capture enabled.
 
 ## Protocol
 
-The adapter sends one UTF-8 JSON object per line through the local named pipe `RealTimeTranslater.UnityText.v1`.
+The adapter sends one UTF-8 JSON object per line over a loopback-only TCP connection to `127.0.0.1:47851`.
 
 Example:
 
