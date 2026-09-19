@@ -11,14 +11,21 @@ internal static partial class UnityAdapterTextSelector
 
     private static readonly string[] StrongDialogueHints =
     {
-        "dialog", "dialogue", "talk", "message", "choice",
+        "dialog", "dialogue", "talk", "message",
         "story", "scenario", "novel", "textbox",
         "conversation", "caption", "subtitle"
     };
 
     private static readonly string[] SpeakerHints =
     {
-        "speaker", "speakername", "charactername", "nameplate"
+        "speaker", "speakername", "charactername", "nameplate",
+        "character_name", "chara_name", "talker", "talkername",
+        "name_text", "nametext"
+    };
+
+    private static readonly string[] ChoiceHints =
+    {
+        "choice", "answer", "option", "decision", "response"
     };
 
     private static readonly string[] StructuredUiMetadataHints =
@@ -37,6 +44,25 @@ internal static partial class UnityAdapterTextSelector
         "cooldown", "attack speed", "move speed", "owned effect",
         "active while owned", "augments", "magic:", "sword:"
     };
+
+    private static readonly HashSet<string> NavigationControlLabels =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "skip",
+            "auto",
+            "menu",
+            "back",
+            "close",
+            "log",
+            "history",
+            "backlog",
+            "hide",
+            "save",
+            "load",
+            "config",
+            "settings",
+            "next"
+        };
 
     internal static IReadOnlyList<UnityAdapterRegionDto> Select(
         UnityAdapterSnapshot snapshot,
@@ -60,7 +86,7 @@ internal static partial class UnityAdapterTextSelector
         }
 
         var scored = visible
-            .Select(region => AnalyzeSubtitleCandidate(
+            .Select(region => AnalyzeDialogueCandidate(
                 region,
                 sourceWidth,
                 sourceHeight))
@@ -83,7 +109,7 @@ internal static partial class UnityAdapterTextSelector
             .ToArray();
     }
 
-    private static SubtitleCandidate AnalyzeSubtitleCandidate(
+    private static DialogueCandidate AnalyzeDialogueCandidate(
         UnityAdapterRegionDto region,
         int screenWidth,
         int screenHeight)
@@ -91,7 +117,8 @@ internal static partial class UnityAdapterTextSelector
         var text = region.Text.Trim();
         var lowered = text.ToLowerInvariant();
         var metadata =
-            $"{region.ObjectName} {region.Hierarchy}".ToLowerInvariant();
+            $"{region.ObjectName} {region.Hierarchy} {region.SelectableName}"
+                .ToLowerInvariant();
 
         var lineCount = Math.Max(
             1,
@@ -104,12 +131,26 @@ internal static partial class UnityAdapterTextSelector
 
         var hasStrongDialogueHint =
             StrongDialogueHints.Any(metadata.Contains);
+
         var hasSpeakerHint =
+            region.IsSpeakerLike ||
             SpeakerHints.Any(metadata.Contains);
+
+        var isChoice =
+            region.IsChoiceLike ||
+            ChoiceHints.Any(metadata.Contains);
+
         var hasSentenceEnding =
             SentenceEndingRegex().IsMatch(text);
+
         var hasJapaneseSentencePunctuation =
             JapaneseSentencePunctuationRegex().IsMatch(text);
+
+        var looksLikeSentence =
+            hasSentenceEnding ||
+            hasJapaneseSentencePunctuation ||
+            (words >= 5 && text.Length >= 24) ||
+            (japaneseCount >= 8 && text.Length >= 16);
 
         var looksStructuredUi =
             StructuredUiMetadataHints.Any(metadata.Contains) ||
@@ -118,41 +159,69 @@ internal static partial class UnityAdapterTextSelector
             BulletLineRegex().Matches(text).Count >= 2 ||
             UiNoiseHints.Count(lowered.Contains) >= 2;
 
-        var looksLikeSentence =
-            hasSentenceEnding ||
-            hasJapaneseSentencePunctuation ||
-            (words >= 5 && text.Length >= 24) ||
-            (japaneseCount >= 8 && text.Length >= 16);
+        if (hasSpeakerHint)
+            return Reject(region);
 
-        var isChoice =
-            metadata.Contains("choice", StringComparison.Ordinal);
+        if (region.IsSelectable &&
+            NavigationControlLabels.Contains(
+                NormalizeControlLabel(text)))
+        {
+            return Reject(region);
+        }
 
-        // Subtitle mode should be conservative. A short name by itself,
-        // a stat block, or a tooltip is not enough evidence of dialogue.
+        // A normal Unity Button/Selectable inside the dialogue canvas is
+        // usually SKIP/AUTO/etc. Keep it only when it is explicitly choice-like
+        // or the button text itself clearly looks like a dialogue response.
+        if (region.IsSelectable &&
+            !isChoice &&
+            !looksLikeSentence)
+        {
+            return Reject(region);
+        }
+
+        // Speaker labels are often simple Text objects rather than Selectables.
+        // Suppress short name/title-like strings even when their parent lives
+        // under a dialogue container.
+        var looksLikeNameOnly =
+            !isChoice &&
+            !looksLikeSentence &&
+            lineCount == 1 &&
+            words is >= 1 and <= 3 &&
+            text.Length <= 32;
+
+        if (looksLikeNameOnly)
+            return Reject(region);
+
+        if (looksStructuredUi && !isChoice)
+            return Reject(region);
+
+        var probableChoiceButton =
+            region.IsSelectable &&
+            hasStrongDialogueHint &&
+            looksLikeSentence;
+
         var isCandidate =
-            !looksStructuredUi &&
-            (hasStrongDialogueHint ||
-             isChoice ||
-             looksLikeSentence);
+            isChoice ||
+            probableChoiceButton ||
+            (!region.IsSelectable &&
+             (hasStrongDialogueHint || looksLikeSentence));
 
         if (!isCandidate)
-        {
-            return new SubtitleCandidate(
-                region,
-                IsCandidate: false,
-                Score: int.MinValue);
-        }
+            return Reject(region);
 
         var score = 0;
 
-        if (hasStrongDialogueHint)
-            score += 120;
-
         if (isChoice)
-            score += 70;
+            score += 140;
+
+        if (probableChoiceButton)
+            score += 100;
+
+        if (hasStrongDialogueHint)
+            score += 80;
 
         if (hasSentenceEnding || hasJapaneseSentencePunctuation)
-            score += 45;
+            score += 50;
 
         if (words >= 5)
             score += 25;
@@ -172,9 +241,6 @@ internal static partial class UnityAdapterTextSelector
         if (lineCount is 2 or 3)
             score += 8;
 
-        if (hasSpeakerHint && !looksLikeSentence)
-            score -= 40;
-
         if (UiNoiseHints.Any(lowered.Contains))
             score -= 35;
 
@@ -187,11 +253,24 @@ internal static partial class UnityAdapterTextSelector
         if (lineCount >= 4)
             score -= 35;
 
-        return new SubtitleCandidate(
+        return new DialogueCandidate(
             region,
             IsCandidate: score >= 35,
             Score: score);
     }
+
+    private static DialogueCandidate Reject(
+        UnityAdapterRegionDto region)
+        => new(
+            region,
+            IsCandidate: false,
+            Score: int.MinValue);
+
+    private static string NormalizeControlLabel(string text)
+        => WhitespaceRegex()
+            .Replace(text.Trim(), " ")
+            .Trim()
+            .ToLowerInvariant();
 
     private static bool IsMeaningful(UnityAdapterRegionDto region)
     {
@@ -244,7 +323,7 @@ internal static partial class UnityAdapterTextSelector
             or >= 0x4E00 and <= 0x9FFF
             or >= 0xFF66 and <= 0xFF9D;
 
-    private sealed record SubtitleCandidate(
+    private sealed record DialogueCandidate(
         UnityAdapterRegionDto Region,
         bool IsCandidate,
         int Score);
@@ -263,4 +342,7 @@ internal static partial class UnityAdapterTextSelector
 
     [GeneratedRegex(@"(?m)^\s*[-•*]\s+")]
     private static partial Regex BulletLineRegex();
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex WhitespaceRegex();
 }
