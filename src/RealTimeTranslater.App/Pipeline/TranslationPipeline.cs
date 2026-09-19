@@ -29,6 +29,10 @@ public sealed class TranslationPipeline : IDisposable
     private IReadOnlyList<TranslatedRegion> _lastUnityTranslations =
         Array.Empty<TranslatedRegion>();
     private double? _lastUnityTranslationMilliseconds;
+    private string _failedUnityTextKey = string.Empty;
+    private DateTimeOffset _nextUnityTranslationRetryAt =
+        DateTimeOffset.MinValue;
+    private string? _lastUnityTranslationError;
 
     public TranslationPipeline(
         IntPtr targetWindow,
@@ -53,7 +57,7 @@ public sealed class TranslationPipeline : IDisposable
         _stabilizer = new FrameTextStabilizer(settings.StabilityFrames);
         _translator = new TranslationCoordinator(
             translationProvider,
-            contextLimit: 2);
+            contextLimit: 0);
     }
 
     public event Action<string>? StatusChanged;
@@ -118,40 +122,80 @@ public sealed class TranslationPipeline : IDisposable
                         "\u001e",
                         unityRegions.Select(region => region.Text));
 
-                    if (!string.Equals(
+                    var retryCoolingDown =
+                        string.Equals(
+                            unityTextKey,
+                            _failedUnityTextKey,
+                            StringComparison.Ordinal) &&
+                        DateTimeOffset.UtcNow <
+                            _nextUnityTranslationRetryAt;
+
+                    var needsTranslation =
+                        !string.Equals(
                             unityTextKey,
                             _lastUnityTextKey,
                             StringComparison.Ordinal) ||
-                        _lastUnityTranslations.Count != unityRegions.Count)
+                        _lastUnityTranslations.Count != unityRegions.Count;
+
+                    if (needsTranslation && !retryCoolingDown)
                     {
                         var translationStart = Stopwatch.GetTimestamp();
 
-                        var unityContext =
-                            UnityAdapterTextSelector.BuildTranslationContext(
-                                unitySnapshot);
+                        try
+                        {
+                            var unityContext =
+                                UnityAdapterTextSelector
+                                    .BuildTranslationContext(
+                                        unitySnapshot);
 
-                        _lastUnityTranslations =
-                            await _translator.TranslateAsync(
-                                unityRegions,
-                                "auto",
-                                _targetLanguage,
-                                cancellationToken,
-                                unityContext);
+                            _lastUnityTranslations =
+                                await _translator.TranslateAsync(
+                                    unityRegions,
+                                    "auto",
+                                    _targetLanguage,
+                                    cancellationToken,
+                                    unityContext);
 
-                        _lastUnityTranslationMilliseconds =
-                            Stopwatch.GetElapsedTime(
-                                translationStart).TotalMilliseconds;
+                            _lastUnityTranslationMilliseconds =
+                                Stopwatch.GetElapsedTime(
+                                    translationStart)
+                                .TotalMilliseconds;
 
-                        _lastUnityTextKey = unityTextKey;
+                            _lastUnityTextKey = unityTextKey;
+                            _failedUnityTextKey = string.Empty;
+                            _lastUnityTranslationError = null;
+                        }
+                        catch (OperationCanceledException)
+                            when (cancellationToken.IsCancellationRequested)
+                        {
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            _lastUnityTranslations =
+                                Array.Empty<TranslatedRegion>();
+                            _lastUnityTextKey = string.Empty;
+                            _failedUnityTextKey = unityTextKey;
+                            _nextUnityTranslationRetryAt =
+                                DateTimeOffset.UtcNow
+                                    .AddSeconds(1.5);
+                            _lastUnityTranslationMilliseconds =
+                                Stopwatch.GetElapsedTime(
+                                    translationStart)
+                                .TotalMilliseconds;
+                            _lastUnityTranslationError =
+                                SummarizeError(ex);
+                        }
                     }
-                    else
+                    else if (!needsTranslation)
                     {
                         _lastUnityTranslations =
                             _lastUnityTranslations
                                 .Select((translated, index) =>
                                     translated with
                                     {
-                                        Bounds = unityRegions[index].Bounds
+                                        Bounds =
+                                            unityRegions[index].Bounds
                                     })
                                 .ToArray();
                     }
@@ -159,9 +203,11 @@ public sealed class TranslationPipeline : IDisposable
                 else
                 {
                     _lastUnityTextKey = string.Empty;
+                    _failedUnityTextKey = string.Empty;
                     _lastUnityTranslations =
                         Array.Empty<TranslatedRegion>();
                     _lastUnityTranslationMilliseconds = null;
+                    _lastUnityTranslationError = null;
                 }
 
                 await _overlay.Dispatcher.InvokeAsync(() =>
@@ -180,8 +226,14 @@ public sealed class TranslationPipeline : IDisposable
                         ? $" · translate {latency:0} ms"
                         : string.Empty;
 
+                var translationState =
+                    _lastUnityTranslationError is null
+                        ? latencyNote
+                        : $" · translation error, retrying: " +
+                          _lastUnityTranslationError;
+
                 StatusChanged?.Invoke(
-                    $"Running · {_capture.BackendName} · Unity Adapter {unityScope} · {unityRegions.Count}/{unitySnapshot.Data.Regions.Count} selected text region(s){latencyNote}");
+                    $"Running · {_capture.BackendName} · Unity Adapter {unityScope} · {unityRegions.Count}/{unitySnapshot.Data.Regions.Count} selected text region(s){translationState}");
 
                 await DelayRemaining(
                     loopStart,
@@ -204,29 +256,53 @@ public sealed class TranslationPipeline : IDisposable
 
                 if (stableRegions is not null)
                 {
-                    var translated = await _translator.TranslateAsync(
-                        stableRegions,
-                        _sourceLanguage,
-                        _targetLanguage,
-                        cancellationToken);
+                    try
+                    {
+                        var translated =
+                            await _translator.TranslateAsync(
+                                stableRegions,
+                                _sourceLanguage,
+                                _targetLanguage,
+                                cancellationToken);
 
-                    await _overlay.Dispatcher.InvokeAsync(() =>
-                        _overlay.Render(
-                            translated,
-                            frame.ScreenBounds,
-                            frame.DpiScale));
+                        await _overlay.Dispatcher.InvokeAsync(() =>
+                            _overlay.Render(
+                                translated,
+                                frame.ScreenBounds,
+                                frame.DpiScale));
 
-                    var fallbackNote =
-                        _capture.FallbackReason is null
-                            ? string.Empty
-                            : " · WGC unavailable, using GDI";
+                        var fallbackNote =
+                            _capture.FallbackReason is null
+                                ? string.Empty
+                                : " · WGC unavailable, using GDI";
 
-                    var adapterNote = useUnityAdapter
-                        ? " · Unity Adapter waiting, OCR fallback"
-                        : string.Empty;
+                        var adapterNote = useUnityAdapter
+                            ? " · Unity Adapter waiting, OCR fallback"
+                            : string.Empty;
 
-                    StatusChanged?.Invoke(
-                        $"Running · {_capture.BackendName}{fallbackNote}{adapterNote} · OCR {stableRegions.Count} line(s) · overlay {translated.Count} line(s)");
+                        StatusChanged?.Invoke(
+                            $"Running · {_capture.BackendName}{fallbackNote}{adapterNote} · OCR {stableRegions.Count} line(s) · overlay {translated.Count} line(s)");
+                    }
+                    catch (OperationCanceledException)
+                        when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        forcedOcrFrames = Math.Max(
+                            forcedOcrFrames,
+                            _settings.StabilityFrames);
+
+                        await _overlay.Dispatcher.InvokeAsync(() =>
+                            _overlay.Render(
+                                Array.Empty<TranslatedRegion>(),
+                                frame.ScreenBounds,
+                                frame.DpiScale));
+
+                        StatusChanged?.Invoke(
+                            $"Running · {_capture.BackendName} · OCR translation error, retrying: {SummarizeError(ex)}");
+                    }
                 }
                 else
                 {
@@ -260,6 +336,18 @@ public sealed class TranslationPipeline : IDisposable
     }
 
     public void Dispose() => _capture.Dispose();
+
+    private static string SummarizeError(Exception ex)
+    {
+        var message = ex.Message
+            .Replace("\r", " ")
+            .Replace("\n", " ")
+            .Trim();
+
+        return message.Length <= 180
+            ? message
+            : message[..180] + "…";
+    }
 
     private static async Task DelayRemaining(
         long loopStart,
