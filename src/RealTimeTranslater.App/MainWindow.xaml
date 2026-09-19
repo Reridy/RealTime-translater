@@ -173,7 +173,7 @@
                 <TextBlock Margin="0,12,0,0"
                            Foreground="Gray"
                            TextWrapping="Wrap"
-                           Text="Tip: Unity Adapter reads visible in-game text through a local BepInEx companion plugin and falls back to OCR if no adapter data arrives." />
+                           Text="Tip: with Unity Adapter, check dialogue-only for conversations/choices or uncheck it to translate all visible Unity UI text." />
             </StackPanel>
         </Border>
 
