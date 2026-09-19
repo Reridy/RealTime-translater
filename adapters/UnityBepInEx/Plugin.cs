@@ -13,12 +13,12 @@ namespace RealTimeTranslater.UnityBepInEx;
 [BepInPlugin(
     "com.realtimetranslater.unityadapter",
     "RealTimeTranslater Unity Adapter",
-    "0.3.0")]
+    "0.3.1")]
 public sealed class Plugin : BaseUnityPlugin
 {
     private const int MaximumRegions = 128;
     private const int MaximumTextLength = 2048;
-    private const float PollIntervalSeconds = 0.20f;
+    private const float PollIntervalSeconds = 0.12f;
 
     private static readonly Regex RichTextTagPattern =
         new Regex("<[^>]+>", RegexOptions.Compiled);
@@ -34,7 +34,7 @@ public sealed class Plugin : BaseUnityPlugin
 
         StartCoroutine(PublishLoop());
         Logger.LogInfo(
-            "RealTimeTranslater Unity Adapter 0.3.0 loaded; tight text bounds enabled.");
+            "RealTimeTranslater Unity Adapter 0.3.1 loaded; tight text bounds and faster text polling enabled.");
     }
 
     private void OnDestroy()
