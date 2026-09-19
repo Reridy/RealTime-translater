@@ -52,6 +52,7 @@ public partial class MainWindow : Window
             "Subtitle"
         };
         OverlayModeComboBox.SelectedItem = _settings.Overlay.Mode;
+        AllowScreenshotsCheckBox.IsChecked = _settings.Overlay.AllowScreenshots;
 
         ModelTextBox.Text = _settings.Translation.OllamaModel;
         SetEndpointForSelectedProvider();
@@ -107,6 +108,8 @@ public partial class MainWindow : Window
             _settings.Overlay.Mode =
                 OverlayModeComboBox.SelectedItem?.ToString()
                 ?? "Replace";
+            _settings.Overlay.AllowScreenshots =
+                AllowScreenshotsCheckBox.IsChecked == true;
 
             _ocrService = new TesseractOcrService(
                 _settings.OcrDataPath,
@@ -175,6 +178,15 @@ public partial class MainWindow : Window
 
     private async void StopButton_Click(object sender, RoutedEventArgs e)
         => await StopInternalAsync();
+
+    private void AllowScreenshotsCheckBox_Changed(
+        object sender,
+        RoutedEventArgs e)
+    {
+        var allowScreenshots = AllowScreenshotsCheckBox.IsChecked == true;
+        _settings.Overlay.AllowScreenshots = allowScreenshots;
+        _overlayWindow?.SetAllowScreenshots(allowScreenshots);
+    }
 
     private void ProviderComboBox_SelectionChanged(
         object sender,
