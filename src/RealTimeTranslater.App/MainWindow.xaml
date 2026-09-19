@@ -88,7 +88,22 @@
                            Text="Text source" />
                 <ComboBox x:Name="TextSourceComboBox"
                           Grid.Column="1"
-                          MinHeight="28" />
+                          MinHeight="28"
+                          SelectionChanged="TextSourceComboBox_SelectionChanged" />
+            </Grid>
+            <Grid Margin="0,3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock VerticalAlignment="Center"
+                           Text="Unity scope" />
+                <CheckBox x:Name="UnityDialogueOnlyCheckBox"
+                          Grid.Column="1"
+                          VerticalAlignment="Center"
+                          Checked="UnityDialogueOnlyCheckBox_Changed"
+                          Unchecked="UnityDialogueOnlyCheckBox_Changed"
+                          Content="Translate dialogue / choices only (unchecked = all visible text)" />
             </Grid>
             <Grid Margin="0,3">
                 <Grid.ColumnDefinitions>
