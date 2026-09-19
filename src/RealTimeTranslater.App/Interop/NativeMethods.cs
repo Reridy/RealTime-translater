@@ -10,6 +10,7 @@ internal static class NativeMethods
     internal const long WsExToolWindow = 0x00000080L;
     internal const long WsExNoActivate = 0x08000000L;
     internal const long WsExLayered = 0x00080000L;
+    internal const uint WdaNone = 0x00000000;
     internal const uint WdaExcludeFromCapture = 0x00000011;
 
     internal delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
