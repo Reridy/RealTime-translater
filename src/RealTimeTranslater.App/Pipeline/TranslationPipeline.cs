@@ -103,7 +103,8 @@ public sealed class TranslationPipeline : IDisposable
                 var selectedUnityRegions =
                     UnityAdapterTextSelector.Select(
                         unitySnapshot,
-                        _settings.Overlay.Mode);
+                        _settings.Overlay.Mode,
+                        _settings.UnityDialogueOnly);
 
                 var unityRegions = UnityAdapterRegionMapper.Map(
                     unitySnapshot,
@@ -156,8 +157,13 @@ public sealed class TranslationPipeline : IDisposable
                         frame.ScreenBounds,
                         frame.DpiScale));
 
+                var unityScope =
+                    _settings.UnityDialogueOnly
+                        ? "dialogue"
+                        : "all text";
+
                 StatusChanged?.Invoke(
-                    $"Running · {_capture.BackendName} · Unity Adapter {unityRegions.Count}/{unitySnapshot.Data.Regions.Count} selected text region(s)");
+                    $"Running · {_capture.BackendName} · Unity Adapter {unityScope} · {unityRegions.Count}/{unitySnapshot.Data.Regions.Count} selected text region(s)");
 
                 await DelayRemaining(
                     loopStart,
