@@ -117,7 +117,7 @@ Coordinates use Unity's current render resolution and a top-left origin. The des
 - The adapter scans active `TextMeshProUGUI` and legacy `UnityEngine.UI.Text` objects every 200 ms.
 - Transparent text hidden by `Graphic.color.a` or parent `CanvasGroup.alpha` is rejected before publishing.
 - Each region also carries its Unity object name and hierarchy path so the desktop app can classify dialogue-like text separately from status/UI noise.
-- Subtitle mode ranks likely dialogue/speaker/choice text and limits the number of translated regions; Replace mode remains broader.
+- Subtitle mode is intentionally conservative: it rejects tooltip/stat blocks, short name-only strings, and common menu/status noise, then ranks likely dialogue/choice sentences and limits the translated regions; Replace mode remains broader.
 - Unity Adapter translation uses source language `auto` so mixed Japanese/English UI can be handled without tying it to the OCR language selector.
 - World-space text and unusual custom renderers may have imperfect rectangles.
 - Complex masks/clipping can still leave some visually hidden objects in the feed.
