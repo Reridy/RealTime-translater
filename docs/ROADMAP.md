@@ -40,15 +40,22 @@ This phase should make the tool genuinely comfortable for visual novels before b
 
 ## Phase 2 - Better capture and OCR
 
-Replace GDI capture behind the existing capture boundary with Windows Graphics Capture.
+Windows Graphics Capture is now the primary capture backend, with automatic GDI fallback.
 
-Goals:
+Completed:
 
-- capture occluded windows
-- lower latency
-- support borderless fullscreen more reliably
-- reduce CPU copies
-- optionally use GPU textures end-to-end
+- direct HWND capture through Windows Graphics Capture
+- free-threaded frame pool
+- client-area cropping so OCR coordinates stay compatible with the existing overlay
+- screenshot-visible overlay mode without self-OCR while WGC is active
+- backend status reporting and GDI fallback
+
+Remaining capture goals:
+
+- reduce the current GPU -> SoftwareBitmap -> CPU bitmap copy cost
+- support borderless fullscreen more reliably across more games
+- keep GPU textures end-to-end for OCR backends that can consume them
+- improve resize/recreate behavior and capture diagnostics
 
 OCR upgrades:
 
