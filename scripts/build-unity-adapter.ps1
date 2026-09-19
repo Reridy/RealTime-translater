@@ -1,0 +1,46 @@
+param(
+    [Parameter(Mandatory = $true)]
+    [string]$GameDir
+)
+
+$ErrorActionPreference = "Stop"
+
+$game = (Resolve-Path $GameDir).Path
+$repo = Split-Path $PSScriptRoot -Parent
+$project = Join-Path $repo "adapters\UnityBepInEx\RealTimeTranslater.UnityBepInEx.csproj"
+
+$required = @(
+    "BepInEx\core\BepInEx.dll",
+    "Kurea Struggle_Data\Managed\UnityEngine.CoreModule.dll",
+    "Kurea Struggle_Data\Managed\UnityEngine.UI.dll",
+    "Kurea Struggle_Data\Managed\Unity.TextMeshPro.dll"
+)
+
+foreach ($relative in $required) {
+    $path = Join-Path $game $relative
+    if (-not (Test-Path $path)) {
+        throw "Required game assembly not found: $path"
+    }
+}
+
+Write-Host "Building Unity/BepInEx adapter..."
+& dotnet build $project -c Release "/p:GameDir=$game"
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Adapter build failed."
+}
+
+$output = Join-Path $repo "adapters\UnityBepInEx\bin\Release\netstandard2.0\RealTimeTranslater.UnityBepInEx.dll"
+if (-not (Test-Path $output)) {
+    throw "Built adapter DLL was not found: $output"
+}
+
+$destination = Join-Path $game "BepInEx\plugins\RealTimeTranslaterUnityAdapter"
+New-Item -ItemType Directory -Force -Path $destination | Out-Null
+Copy-Item $output $destination -Force
+
+Write-Host ""
+Write-Host "Installed:"
+Write-Host "  $destination\RealTimeTranslater.UnityBepInEx.dll"
+Write-Host ""
+Write-Host "Start RealTime Translater, choose 'Unity Adapter + OCR fallback', then start the game."
