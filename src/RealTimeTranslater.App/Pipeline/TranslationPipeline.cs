@@ -388,9 +388,14 @@ public sealed class TranslationPipeline : IDisposable
                                     _targetLanguage,
                                     cancellationToken);
 
+                            var styled =
+                                PrepareOverlayRegions(
+                                    translated,
+                                    frame);
+
                             await _overlay.Dispatcher.InvokeAsync(() =>
                                 _overlay.Render(
-                                    translated,
+                                    styled,
                                     frame.ScreenBounds,
                                     frame.DpiScale));
 
@@ -709,11 +714,33 @@ public sealed class TranslationPipeline : IDisposable
         IReadOnlyList<TranslatedRegion> regions,
         CaptureFrame frame)
     {
+        var styled =
+            PrepareOverlayRegions(
+                regions,
+                frame);
+
         await _overlay.Dispatcher.InvokeAsync(() =>
             _overlay.Render(
-                regions,
+                styled,
                 frame.ScreenBounds,
                 frame.DpiScale));
+    }
+
+    private IReadOnlyList<TranslatedRegion> PrepareOverlayRegions(
+        IReadOnlyList<TranslatedRegion> regions,
+        CaptureFrame frame)
+    {
+        if (!string.Equals(
+                _settings.Overlay.Mode,
+                "Replace",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return regions;
+        }
+
+        return OverlayRegionStyler.ApplyBackgroundSamples(
+            regions,
+            frame);
     }
 
     private string BuildUnityStatusState(
