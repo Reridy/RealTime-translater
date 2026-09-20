@@ -13,6 +13,14 @@ internal static class NativeMethods
     internal const uint WdaNone = 0x00000000;
     internal const uint WdaExcludeFromCapture = 0x00000011;
 
+    internal const int WmHotkey = 0x0312;
+    internal const uint ModControl = 0x0002;
+    internal const uint ModShift = 0x0004;
+    internal const uint ModNoRepeat = 0x4000;
+    internal const uint VkF8 = 0x77;
+    internal const uint VkF9 = 0x78;
+    internal const uint VkF10 = 0x79;
+
     internal delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -76,4 +84,18 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint affinity);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool RegisterHotKey(
+        IntPtr hWnd,
+        int id,
+        uint fsModifiers,
+        uint vk);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool UnregisterHotKey(
+        IntPtr hWnd,
+        int id);
 }
