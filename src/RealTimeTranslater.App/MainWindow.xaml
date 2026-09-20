@@ -216,7 +216,7 @@
                 <TextBlock Grid.Row="2"
                            Foreground="Gray"
                            TextWrapping="Wrap"
-                           Text="Tip: smart scope translates dialogue, cinematic captions, choices, tutorials, and readable prose while filtering HUD/menu noise." />
+                           Text="Tip: Smart overlay adapts between native replacement and subtitles. Hotkeys: Ctrl+Shift+F8 hide/show overlay · F9 start/stop · F10 cycle overlay mode." />
             </Grid>
         </Border>
 
