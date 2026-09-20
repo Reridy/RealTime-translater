@@ -2,7 +2,7 @@
 
 A Windows-first real-time game screen translation overlay.
 
-The MVP captures a selected game window, skips unchanged frames, runs OCR, stabilizes noisy OCR output, translates only new text, and renders the Korean result over the original screen position with a click-through overlay.
+The MVP captures a selected game window, skips unchanged frames, runs OCR, stabilizes noisy OCR output, translates only new text, and renders the selected target language over the original screen position with a click-through overlay.
 
 ## MVP status
 
@@ -16,6 +16,7 @@ Implemented on the feature/mvp-realtime-translation branch:
 - Stabilize OCR over multiple frames before translating.
 - Cache translations to avoid repeat network/model calls, including a persistent per-user cache across restarts.
 - Translate through Ollama, LibreTranslate, or a built-in mock provider.
+- Choose the target translation language from the desktop UI. The current presets include Korean, English, Japanese, Simplified/Traditional Chinese, Spanish, French, German, Portuguese, Russian, Thai, Vietnamese, Indonesian, Italian, Polish, Turkish, Dutch, and Arabic.
 - Preserve recent dialogue context for translation prompts.
 - Render translated text using a transparent, click-through, topmost WPF overlay. Replace mode now samples the local game background, erases only the original glyph rectangle, and lays Korean out inside the game's original Unity text container when adapter metadata is available.
 - Optional screenshot-visible overlay mode. With WGC active, the app captures the target window directly so its own overlay is not fed back into OCR.
@@ -43,7 +44,7 @@ Requirements:
 
     dotnet run --project src/RealTimeTranslater.App
 
-4. Pick the game window, choose an OCR language and translation provider, then press Start.
+4. Pick the game window, choose an OCR language, target language, and translation provider, then press Start.
 
 For real translation without a cloud API key, run a local Ollama server and select Ollama in the app. The model name and endpoint are editable in the UI.
 
