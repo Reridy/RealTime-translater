@@ -12,6 +12,7 @@
     "Provider": "Mock",
     "SourceLanguage": "ja",
     "TargetLanguage": "ko",
+    "Mode": "Balanced",
     "OllamaEndpoint": "http://localhost:11434",
     "OllamaModel": "translategemma:4b",
     "LibreTranslateEndpoint": "http://localhost:5000"
