@@ -3,6 +3,7 @@
   "ChangeThreshold": 0.025,
   "StabilityFrames": 2,
   "OcrLanguage": "jpn+eng",
+  "OcrRegion": "Full window",
   "TextSource": "OCR",
   "UnityDialogueOnly": true,
   "OcrDataPath": "tessdata",
