@@ -43,6 +43,47 @@ public partial class OverlayWindow : Window
             return;
         }
 
+        if (string.Equals(
+                _settings.Mode,
+                "Smart",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            var subtitleRegions = regions
+                .Where(region =>
+                    ShouldRenderSmartSubtitle(
+                        region,
+                        dpiScale))
+                .ToArray();
+
+            var subtitleSet =
+                subtitleRegions.ToHashSet();
+
+            foreach (var region in regions)
+            {
+                if (subtitleSet.Contains(region))
+                {
+                    RenderSourceMask(
+                        region,
+                        dpiScale);
+                }
+                else
+                {
+                    RenderReplaceRegion(
+                        region,
+                        dpiScale);
+                }
+            }
+
+            if (subtitleRegions.Length > 0)
+            {
+                RenderSubtitle(
+                    subtitleRegions,
+                    dpiScale);
+            }
+
+            return;
+        }
+
         foreach (var region in regions)
             RenderReplaceRegion(region, dpiScale);
     }
@@ -131,61 +172,9 @@ public partial class OverlayWindow : Window
                 region.ForegroundArgb,
                 replaceBackground.Color);
 
-        // Erase only the rendered source glyph rectangle. The translated text
-        // itself is laid out separately inside Unity's original text container,
-        // so we do not need a large opaque panel behind the translation.
-        var maskPaddingX = 2.5;
-        var maskPaddingY = 2.0;
-
-        var maskWidth =
-            Math.Min(
-                Width,
-                sourceWidth +
-                maskPaddingX * 2);
-
-        var maskHeight =
-            Math.Min(
-                Height,
-                sourceHeight +
-                maskPaddingY * 2);
-
-        var maskLeft =
-            Math.Clamp(
-                sourceLeft -
-                maskPaddingX,
-                0,
-                Math.Max(
-                    0,
-                    Width - maskWidth));
-
-        var maskTop =
-            Math.Clamp(
-                sourceTop -
-                maskPaddingY,
-                0,
-                Math.Max(
-                    0,
-                    Height - maskHeight));
-
-        var mask = new Border
-        {
-            Width = maskWidth,
-            Height = maskHeight,
-            Background = replaceBackground,
-            CornerRadius = new CornerRadius(0),
-            IsHitTestVisible = false,
-            SnapsToDevicePixels = true
-        };
-
-        Canvas.SetLeft(
-            mask,
-            maskLeft);
-        Canvas.SetTop(
-            mask,
-            maskTop);
-
-        OverlayCanvas.Children.Add(
-            mask);
+        RenderSourceMask(
+            region,
+            dpiScale);
 
         var sourceLineCount =
             Math.Max(
@@ -297,6 +286,161 @@ public partial class OverlayWindow : Window
 
         OverlayCanvas.Children.Add(
             textContainer);
+    }
+
+    private bool ShouldRenderSmartSubtitle(
+        TranslatedRegion region,
+        double dpiScale)
+    {
+        var sourceText =
+            region.OriginalText?.Trim() ??
+            string.Empty;
+
+        var translatedText =
+            region.TranslatedText?.Trim() ??
+            string.Empty;
+
+        var sourceWidth =
+            region.Bounds.Width /
+            Math.Max(
+                0.1,
+                dpiScale);
+
+        var sourceHeight =
+            region.Bounds.Height /
+            Math.Max(
+                0.1,
+                dpiScale);
+
+        var sourceLineCount =
+            Math.Max(
+                1,
+                region.SourceLineCount ??
+                (sourceText.Count(ch => ch == '\n') + 1));
+
+        if (region.LayoutBounds is PixelRect layout)
+        {
+            var layoutWidth =
+                layout.Width /
+                Math.Max(
+                    0.1,
+                    dpiScale);
+
+            var layoutHeight =
+                layout.Height /
+                Math.Max(
+                    0.1,
+                    dpiScale);
+
+            var hasUsefulLayoutRoom =
+                layoutWidth >=
+                    sourceWidth * 1.12 &&
+                layoutHeight >=
+                    Math.Max(
+                        sourceHeight * 1.18,
+                        34);
+
+            if (hasUsefulLayoutRoom)
+            {
+                return false;
+            }
+        }
+
+        var wideDialogue =
+            sourceWidth >=
+                Width * 0.34;
+
+        var longSource =
+            sourceText.Length >= 54 ||
+            sourceLineCount >= 2;
+
+        var translationExpands =
+            sourceText.Length >= 12 &&
+            translatedText.Length >=
+                sourceText.Length * 1.40;
+
+        return
+            (longSource && wideDialogue) ||
+            (translationExpands &&
+             sourceWidth >= Width * 0.24);
+    }
+
+    private void RenderSourceMask(
+        TranslatedRegion region,
+        double dpiScale)
+    {
+        var sourceLeft =
+            region.Bounds.X / dpiScale;
+
+        var sourceTop =
+            region.Bounds.Y / dpiScale;
+
+        var sourceWidth =
+            Math.Max(
+                2,
+                region.Bounds.Width / dpiScale);
+
+        var sourceHeight =
+            Math.Max(
+                2,
+                region.Bounds.Height / dpiScale);
+
+        var maskPaddingX = 2.5;
+        var maskPaddingY = 2.0;
+
+        var maskWidth =
+            Math.Min(
+                Width,
+                sourceWidth +
+                maskPaddingX * 2);
+
+        var maskHeight =
+            Math.Min(
+                Height,
+                sourceHeight +
+                maskPaddingY * 2);
+
+        var maskLeft =
+            Math.Clamp(
+                sourceLeft -
+                maskPaddingX,
+                0,
+                Math.Max(
+                    0,
+                    Width - maskWidth));
+
+        var maskTop =
+            Math.Clamp(
+                sourceTop -
+                maskPaddingY,
+                0,
+                Math.Max(
+                    0,
+                    Height - maskHeight));
+
+        var mask = new Border
+        {
+            Width = maskWidth,
+            Height = maskHeight,
+            Background =
+                ResolveReplaceBackground(
+                    region.BackgroundArgb),
+            CornerRadius =
+                new CornerRadius(0),
+            IsHitTestVisible = false,
+            SnapsToDevicePixels = true
+        };
+
+        Canvas.SetLeft(
+            mask,
+            maskLeft);
+
+        Canvas.SetTop(
+            mask,
+            maskTop);
+
+        OverlayCanvas.Children.Add(
+            mask);
     }
 
     private static SolidColorBrush ResolveReplaceBackground(
