@@ -52,6 +52,25 @@ public sealed class TranslationCache
         SchedulePersistBestEffort();
     }
 
+    public bool Remove(
+        string sourceLanguage,
+        string targetLanguage,
+        string text)
+    {
+        var removed =
+            _cache.TryRemove(
+                Key(
+                    sourceLanguage,
+                    targetLanguage,
+                    text),
+                out _);
+
+        if (removed)
+            SchedulePersistBestEffort();
+
+        return removed;
+    }
+
     public int Count => _cache.Count;
 
     private void LoadPersistedEntries()
