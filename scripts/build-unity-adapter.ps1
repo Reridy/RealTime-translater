@@ -6,8 +6,27 @@ param(
 $ErrorActionPreference = "Stop"
 
 $game = (Resolve-Path $GameDir).Path
+
 $repo = Split-Path $PSScriptRoot -Parent
-$project = Join-Path $repo "adapters\UnityBepInEx\RealTimeTranslater.UnityBepInEx.csproj"
+$repoProject = Join-Path $repo "adapters\UnityBepInEx\RealTimeTranslater.UnityBepInEx.csproj"
+$packagedProject = Join-Path $PSScriptRoot "adapter-source\UnityBepInEx\RealTimeTranslater.UnityBepInEx.csproj"
+
+if (Test-Path $repoProject) {
+    $project = $repoProject
+}
+elseif (Test-Path $packagedProject) {
+    $project = $packagedProject
+}
+else {
+    throw @"
+Unity adapter project was not found.
+
+Expected either:
+  $repoProject
+or:
+  $packagedProject
+"@
+}
 
 $required = @(
     "BepInEx\core\BepInEx.dll",
@@ -33,7 +52,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "Adapter build failed."
 }
 
-$output = Join-Path $repo "adapters\UnityBepInEx\bin\Release\netstandard2.1\RealTimeTranslater.UnityBepInEx.dll"
+$projectDir = Split-Path $project -Parent
+$output = Join-Path $projectDir "bin\Release\netstandard2.1\RealTimeTranslater.UnityBepInEx.dll"
 if (-not (Test-Path $output)) {
     throw "Built adapter DLL was not found: $output"
 }
