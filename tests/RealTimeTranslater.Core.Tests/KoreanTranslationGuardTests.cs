@@ -69,6 +69,53 @@ public sealed class KoreanTranslationGuardTests
                 candidate));
     }
 
+
+    [Theory]
+    [InlineData(
+        "R-Really? You mean it?",
+        "R-Really? 진짜 그렇게 생각해?",
+        "en")]
+    [InlineData(
+        "NukuNuku is the name we gave it.",
+        "그 이름은 NukuNuku야.",
+        "en")]
+    public void AllowsDifficultEnglishFragmentsWhenSourceIsEnglish(
+        string source,
+        string candidate,
+        string sourceLanguage)
+    {
+        Assert.True(
+            KoreanTranslationGuard.IsAcceptable(
+                source,
+                candidate,
+                sourceLanguage));
+    }
+
+    [Theory]
+    [InlineData(
+        "ぬくぬくって呼ぼう。",
+        "이걸 ぬくぬく라고 부르자.",
+        "ja")]
+    [InlineData(
+        "暖呼呼就是它的名字。",
+        "이름은 暖呼呼야.",
+        "zh")]
+    [InlineData(
+        "これはNukuNukuと呼ばれている。",
+        "이건 NukuNuku라고 불려.",
+        "ja")]
+    public void RejectsUntranslatedForeignLanguageFragments(
+        string source,
+        string candidate,
+        string sourceLanguage)
+    {
+        Assert.False(
+            KoreanTranslationGuard.IsAcceptable(
+                source,
+                candidate,
+                sourceLanguage));
+    }
+
     [Fact]
     public void NormalizeExtractsJsonTranslationWrapper()
     {
