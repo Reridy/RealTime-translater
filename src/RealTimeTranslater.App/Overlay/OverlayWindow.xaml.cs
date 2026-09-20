@@ -12,10 +12,16 @@ namespace RealTimeTranslater.App.Overlay;
 public partial class OverlayWindow : Window
 {
     private readonly OverlaySettings _settings;
+    private readonly bool _rightToLeftTarget;
 
-    public OverlayWindow(OverlaySettings settings)
+    public OverlayWindow(
+        OverlaySettings settings,
+        string targetLanguage = "ko")
     {
         _settings = settings;
+        _rightToLeftTarget =
+            IsRightToLeftLanguage(
+                targetLanguage);
         InitializeComponent();
         SourceInitialized += OnSourceInitialized;
     }
@@ -217,6 +223,14 @@ public partial class OverlayWindow : Window
                 sourceText,
                 layoutWidth);
 
+        if (_rightToLeftTarget &&
+            textAlignment ==
+                TextAlignment.Left)
+        {
+            textAlignment =
+                TextAlignment.Right;
+        }
+
         var verticalAlignment =
             ResolveVerticalAlignment(
                 region.SourceAlignment);
@@ -248,6 +262,9 @@ public partial class OverlayWindow : Window
         {
             Text = translatedText,
             Foreground = replaceForeground,
+            FlowDirection = _rightToLeftTarget
+                ? FlowDirection.RightToLeft
+                : FlowDirection.LeftToRight,
             FontWeight = FontWeights.Normal,
             FontSize = fontSize,
             TextWrapping = TextWrapping.Wrap,
@@ -678,6 +695,9 @@ public partial class OverlayWindow : Window
         {
             Text = text,
             Foreground = Brushes.White,
+            FlowDirection = _rightToLeftTarget
+                ? FlowDirection.RightToLeft
+                : FlowDirection.LeftToRight,
             FontWeight = FontWeights.SemiBold,
             FontSize = fontSize,
             TextWrapping = TextWrapping.Wrap,
@@ -750,6 +770,28 @@ public partial class OverlayWindow : Window
         Canvas.SetLeft(border, left);
         Canvas.SetTop(border, top);
         OverlayCanvas.Children.Add(border);
+    }
+
+    private static bool IsRightToLeftLanguage(
+        string languageCode)
+    {
+        var normalized =
+            languageCode
+                .Trim()
+                .ToLowerInvariant();
+
+        var separator =
+            normalized.IndexOfAny(
+                new[] { '-', '_' });
+
+        if (separator > 0)
+            normalized = normalized[..separator];
+
+        return normalized is
+            "ar" or
+            "fa" or
+            "ur" or
+            "he";
     }
 
     private static string LimitOverlayText(
