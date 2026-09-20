@@ -150,6 +150,83 @@ public sealed class TranslationCoordinatorTests
     }
 
     [Fact]
+    public async Task UserCorrectionOverridesCachedTranslation()
+    {
+        var provider = new CountingProvider();
+        var coordinator = new TranslationCoordinator(provider);
+
+        var regions = new[]
+        {
+            new TextRegion(
+                "Hello.",
+                new PixelRect(0, 0, 100, 20))
+        };
+
+        var initial = await coordinator.TranslateAsync(
+            regions,
+            "en",
+            "ko",
+            CancellationToken.None);
+
+        coordinator.StoreCorrection(
+            new[] { "en", "auto" },
+            "ko",
+            "Hello.",
+            "안녕.");
+
+        var corrected = await coordinator.TranslateAsync(
+            regions,
+            "en",
+            "ko",
+            CancellationToken.None);
+
+        Assert.Equal(
+            "translated:Hello.",
+            initial[0].TranslatedText);
+        Assert.Equal(
+            "안녕.",
+            corrected[0].TranslatedText);
+        Assert.Equal(
+            1,
+            provider.CallCount);
+    }
+
+    [Fact]
+    public async Task InvalidateForcesProviderToTranslateAgain()
+    {
+        var provider = new CountingProvider();
+        var coordinator = new TranslationCoordinator(provider);
+
+        var regions = new[]
+        {
+            new TextRegion(
+                "Again.",
+                new PixelRect(0, 0, 100, 20))
+        };
+
+        await coordinator.TranslateAsync(
+            regions,
+            "en",
+            "ko",
+            CancellationToken.None);
+
+        var removed =
+            coordinator.Invalidate(
+                new[] { "en" },
+                "ko",
+                new[] { "Again." });
+
+        await coordinator.TranslateAsync(
+            regions,
+            "en",
+            "ko",
+            CancellationToken.None);
+
+        Assert.Equal(1, removed);
+        Assert.Equal(2, provider.CallCount);
+    }
+
+    [Fact]
     public async Task UsesBatchProviderForMultipleCacheMisses()
     {
         var provider = new BatchCountingProvider();
