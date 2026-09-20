@@ -24,6 +24,26 @@ public partial class MainWindow : Window
     private OverlayWindow? _overlayWindow;
     private TesseractOcrService? _ocrService;
 
+    private static readonly TargetLanguageOption[] TargetLanguages =
+    {
+        new("ko", "Korean"),
+        new("en", "English"),
+        new("ja", "Japanese"),
+        new("zh", "Chinese"),
+        new("es", "Spanish"),
+        new("fr", "French"),
+        new("de", "German"),
+        new("pt", "Portuguese"),
+        new("it", "Italian"),
+        new("ru", "Russian"),
+        new("vi", "Vietnamese"),
+        new("id", "Indonesian"),
+        new("th", "Thai"),
+        new("pl", "Polish"),
+        new("tr", "Turkish"),
+        new("ar", "Arabic")
+    };
+
     public MainWindow()
     {
         InitializeComponent();
@@ -58,6 +78,16 @@ public partial class MainWindow : Window
             "LibreTranslate"
         };
         ProviderComboBox.SelectedItem = _settings.Translation.Provider;
+
+        TargetLanguageComboBox.ItemsSource =
+            TargetLanguages;
+        TargetLanguageComboBox.SelectedItem =
+            TargetLanguages.FirstOrDefault(option =>
+                string.Equals(
+                    option.Code,
+                    _settings.Translation.TargetLanguage,
+                    StringComparison.OrdinalIgnoreCase))
+            ?? TargetLanguages[0];
 
         OverlayModeComboBox.ItemsSource = new[]
         {
@@ -180,6 +210,11 @@ public partial class MainWindow : Window
                 _ => "auto"
             };
 
+            var targetLanguage =
+                (TargetLanguageComboBox.SelectedItem
+                    as TargetLanguageOption)?.Code
+                ?? _settings.Translation.TargetLanguage;
+
             _settings.OcrLanguage = ocrLanguage;
             _settings.TextSource =
                 TextSourceComboBox.SelectedItem?.ToString()
@@ -193,6 +228,9 @@ public partial class MainWindow : Window
                 AllowScreenshotsCheckBox.IsChecked == true;
             _settings.Translation.Provider =
                 providerName;
+            _settings.Translation.TargetLanguage =
+                targetLanguage;
+
             var configuredEndpoint =
                 EndpointTextBox.Text.Trim();
 
@@ -265,7 +303,7 @@ public partial class MainWindow : Window
                 _overlayWindow,
                 _settings,
                 sourceLanguage,
-                _settings.Translation.TargetLanguage,
+                targetLanguage,
                 _settings.TextSource);
 
             pipeline.StatusChanged += OnPipelineStatusChanged;
@@ -392,6 +430,11 @@ public partial class MainWindow : Window
             ProviderComboBox.SelectedItem?.ToString()
             ?? _settings.Translation.Provider;
 
+        _settings.Translation.TargetLanguage =
+            (TargetLanguageComboBox.SelectedItem
+                as TargetLanguageOption)?.Code
+            ?? _settings.Translation.TargetLanguage;
+
         var endpoint =
             EndpointTextBox.Text.Trim();
 
@@ -513,6 +556,14 @@ public partial class MainWindow : Window
             windows.Count == 0
                 ? "No visible target windows found."
                 : $"Ready · {windows.Count} visible window(s)";
+    }
+
+    private sealed record TargetLanguageOption(
+        string Code,
+        string Name)
+    {
+        public override string ToString()
+            => $"{Name} ({Code})";
     }
 
     private void SetEndpointForSelectedProvider()
