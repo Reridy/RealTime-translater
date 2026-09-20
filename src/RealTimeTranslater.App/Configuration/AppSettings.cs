@@ -109,7 +109,7 @@ public sealed class TranslationSettings
 
 public sealed class OverlaySettings
 {
-    public string Mode { get; set; } = "Replace";
+    public string Mode { get; set; } = "Smart";
     public double BackgroundOpacity { get; set; } = 0.78;
     public double FontSizeScale { get; set; } = 0.82;
     public double MinimumFontSize { get; set; } = 12;
