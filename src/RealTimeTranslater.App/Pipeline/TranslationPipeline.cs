@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using RealTimeTranslater.App.Capture;
 using RealTimeTranslater.App.Configuration;
 using RealTimeTranslater.App.Ocr;
