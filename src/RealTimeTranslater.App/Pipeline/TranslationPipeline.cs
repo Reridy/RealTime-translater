@@ -201,7 +201,6 @@ public sealed class TranslationPipeline : IDisposable
                                     StringComparer.Ordinal)
                                 .ToArray();
 
-                    {
                         var unityTextKey = BuildTextKey(
                             unityRegions);
 
