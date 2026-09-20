@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace RealTimeTranslater.Core.Translation;
@@ -13,6 +14,13 @@ public static partial class KoreanTranslationGuard
             .Replace("\r\n", "\n")
             .Replace("\r", "\n")
             .Trim();
+
+        if (TryExtractJsonTranslation(
+                text,
+                out var jsonTranslation))
+        {
+            text = jsonTranslation;
+        }
 
         text = CodeFenceRegex().Replace(text, string.Empty);
         text = TranslationLabelRegex().Replace(text, string.Empty);
@@ -109,9 +117,9 @@ public static partial class KoreanTranslationGuard
             })
             .Where(item =>
                 item.Hangul >= 3 &&
-                item.Han == 0 &&
-                item.Latin == 0)
-            .OrderByDescending(item => item.Hangul)
+                item.Han == 0)
+            .OrderBy(item => item.Latin)
+            .ThenByDescending(item => item.Hangul)
             .FirstOrDefault();
 
         return candidates == null
@@ -134,12 +142,53 @@ public static partial class KoreanTranslationGuard
         }
 
         if (char.IsUpper(token[0]) &&
-            source.Contains(token, StringComparison.Ordinal))
+            source.Contains(token, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
         return false;
+    }
+
+    private static bool TryExtractJsonTranslation(
+        string text,
+        out string translation)
+    {
+        translation = string.Empty;
+
+        if (!text.StartsWith(
+                "{",
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var json =
+                JsonDocument.Parse(text);
+
+            if (json.RootElement.ValueKind !=
+                    JsonValueKind.Object ||
+                !json.RootElement.TryGetProperty(
+                    "translation",
+                    out var value) ||
+                value.ValueKind !=
+                    JsonValueKind.String)
+            {
+                return false;
+            }
+
+            translation =
+                value.GetString()?.Trim() ??
+                string.Empty;
+
+            return translation.Length > 0;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static bool HasRunawayRepetition(string text)
