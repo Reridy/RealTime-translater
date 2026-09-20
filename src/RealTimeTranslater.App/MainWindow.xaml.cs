@@ -23,6 +23,8 @@ public partial class MainWindow : Window
     private Task? _runTask;
     private OverlayWindow? _overlayWindow;
     private TesseractOcrService? _ocrService;
+    private string _activeProfileKey = string.Empty;
+    private bool _applyingGameProfile;
 
     private static readonly TargetLanguageOption[] TargetLanguages =
     {
@@ -169,6 +171,7 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         CaptureCurrentSettings();
+        SaveActiveGameProfile();
         _settings.Save();
 
         _runCancellation?.Cancel();
@@ -263,6 +266,8 @@ public partial class MainWindow : Window
                     configuredModel;
             }
 
+            SaveGameProfile(
+                target);
             _settings.Save();
 
             _ocrService = new TesseractOcrService(
@@ -402,8 +407,174 @@ public partial class MainWindow : Window
         object sender,
         SelectionChangedEventArgs e)
     {
-        if (IsLoaded)
+        if (IsLoaded &&
+            !_applyingGameProfile)
+        {
             SetEndpointForSelectedProvider();
+        }
+    }
+
+    private void WindowComboBox_SelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (_applyingGameProfile)
+            return;
+
+        SaveActiveGameProfile();
+
+        if (WindowComboBox.SelectedItem is
+            WindowInfo target)
+        {
+            ApplyGameProfile(
+                target);
+        }
+    }
+
+    private void ApplyGameProfile(
+        WindowInfo target)
+    {
+        _activeProfileKey =
+            target.ProfileKey;
+
+        _settings.LastTargetProfileKey =
+            target.ProfileKey;
+
+        if (!_settings.GameProfiles.TryGetValue(
+                target.ProfileKey,
+                out var profile))
+        {
+            return;
+        }
+
+        _applyingGameProfile = true;
+
+        try
+        {
+            if (OcrLanguageComboBox.Items.Contains(
+                    profile.OcrLanguage))
+            {
+                OcrLanguageComboBox.SelectedItem =
+                    profile.OcrLanguage;
+            }
+
+            if (TextSourceComboBox.Items.Contains(
+                    profile.TextSource))
+            {
+                TextSourceComboBox.SelectedItem =
+                    profile.TextSource;
+            }
+
+            UnityDialogueOnlyCheckBox.IsChecked =
+                profile.UnityDialogueOnly;
+
+            var targetLanguage =
+                TargetLanguages.FirstOrDefault(option =>
+                    string.Equals(
+                        option.Code,
+                        profile.TargetLanguage,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (targetLanguage is not null)
+            {
+                TargetLanguageComboBox.SelectedItem =
+                    targetLanguage;
+            }
+
+            if (ProviderComboBox.Items.Contains(
+                    profile.Provider))
+            {
+                ProviderComboBox.SelectedItem =
+                    profile.Provider;
+            }
+
+            if (!string.IsNullOrWhiteSpace(
+                    profile.OllamaModel))
+            {
+                ModelTextBox.Text =
+                    profile.OllamaModel;
+            }
+
+            if (OverlayModeComboBox.Items.Contains(
+                    profile.OverlayMode))
+            {
+                OverlayModeComboBox.SelectedItem =
+                    profile.OverlayMode;
+            }
+
+            AllowScreenshotsCheckBox.IsChecked =
+                profile.AllowScreenshots;
+
+            UpdateUnityScopeAvailability();
+            SetEndpointForSelectedProvider();
+        }
+        finally
+        {
+            _applyingGameProfile = false;
+        }
+    }
+
+    private void SaveGameProfile(
+        WindowInfo target)
+        => SaveGameProfile(
+            target.ProfileKey);
+
+    private void SaveActiveGameProfile()
+    {
+        if (string.IsNullOrWhiteSpace(
+                _activeProfileKey))
+        {
+            return;
+        }
+
+        SaveGameProfile(
+            _activeProfileKey);
+    }
+
+    private void SaveGameProfile(
+        string profileKey)
+    {
+        if (string.IsNullOrWhiteSpace(
+                profileKey))
+        {
+            return;
+        }
+
+        var targetLanguage =
+            (TargetLanguageComboBox.SelectedItem
+                as TargetLanguageOption)?.Code
+            ?? _settings.Translation.TargetLanguage;
+
+        _settings.GameProfiles[
+            profileKey] =
+            new GameProfileSettings
+            {
+                OcrLanguage =
+                    OcrLanguageComboBox.SelectedItem?.ToString()
+                    ?? _settings.OcrLanguage,
+                TextSource =
+                    TextSourceComboBox.SelectedItem?.ToString()
+                    ?? _settings.TextSource,
+                UnityDialogueOnly =
+                    UnityDialogueOnlyCheckBox.IsChecked == true,
+                TargetLanguage =
+                    targetLanguage,
+                Provider =
+                    ProviderComboBox.SelectedItem?.ToString()
+                    ?? _settings.Translation.Provider,
+                OllamaModel =
+                    ModelTextBox.Text.Trim().Length == 0
+                        ? _settings.Translation.OllamaModel
+                        : ModelTextBox.Text.Trim(),
+                OverlayMode =
+                    OverlayModeComboBox.SelectedItem?.ToString()
+                    ?? _settings.Overlay.Mode,
+                AllowScreenshots =
+                    AllowScreenshotsCheckBox.IsChecked == true
+            };
+
+        _settings.LastTargetProfileKey =
+            profileKey;
     }
 
     private void CaptureCurrentSettings()
@@ -543,22 +714,48 @@ public partial class MainWindow : Window
         var previousHandle =
             (WindowComboBox.SelectedItem as WindowInfo)?.Handle;
 
-        var windows = WindowFinder.GetVisibleWindows();
-        WindowComboBox.ItemsSource = windows;
+        var windows =
+            WindowFinder.GetVisibleWindows();
+
+        WindowComboBox.ItemsSource =
+            windows;
 
         if (previousHandle is not null)
         {
             WindowComboBox.SelectedItem =
-                windows.FirstOrDefault(x => x.Handle == previousHandle.Value);
+                windows.FirstOrDefault(window =>
+                    window.Handle ==
+                    previousHandle.Value);
         }
 
-        if (WindowComboBox.SelectedItem is null && windows.Count > 0)
+        if (WindowComboBox.SelectedItem is null &&
+            !string.IsNullOrWhiteSpace(
+                _settings.LastTargetProfileKey))
+        {
+            WindowComboBox.SelectedItem =
+                windows.FirstOrDefault(window =>
+                    string.Equals(
+                        window.ProfileKey,
+                        _settings.LastTargetProfileKey,
+                        StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (WindowComboBox.SelectedItem is null &&
+            windows.Count > 0)
+        {
             WindowComboBox.SelectedIndex = 0;
+        }
+
+        var selected =
+            WindowComboBox.SelectedItem
+            as WindowInfo;
 
         StatusTextBlock.Text =
             windows.Count == 0
                 ? "No visible target windows found."
-                : $"Ready · {windows.Count} visible window(s)";
+                : selected is null
+                    ? $"Ready · {windows.Count} visible window(s)"
+                    : $"Ready · {windows.Count} visible window(s) · profile {selected.ProcessName}";
     }
 
     private sealed record TargetLanguageOption(
