@@ -29,7 +29,32 @@ public static class WindowFinder
             var title = builder.ToString().Trim();
 
             if (title.Length > 0)
-                windows.Add(new WindowInfo(handle, title));
+            {
+                var processName =
+                    string.Empty;
+
+                try
+                {
+                    using var process =
+                        Process.GetProcessById(
+                            unchecked((int)processId));
+
+                    processName =
+                        process.ProcessName;
+                }
+                catch
+                {
+                    // Some elevated/system processes cannot be opened from a
+                    // normal desktop process. The window title remains a safe
+                    // profile fallback in that case.
+                }
+
+                windows.Add(
+                    new WindowInfo(
+                        handle,
+                        title,
+                        processName));
+            }
 
             return true;
         }, IntPtr.Zero);
