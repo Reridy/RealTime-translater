@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using RealTimeTranslater.App.Capture;
 using RealTimeTranslater.App.Configuration;
+using RealTimeTranslater.App.Interop;
 using RealTimeTranslater.App.Ocr;
 using RealTimeTranslater.App.Overlay;
 using RealTimeTranslater.App.Pipeline;
