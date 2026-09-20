@@ -29,12 +29,12 @@ Priority:
 
 1. Region-of-interest editor so users can draw dialogue, name, and menu OCR zones.
 2. Per-region OCR settings and preprocessing.
-3. Game profiles saved by executable/window signature.
-4. Glossary support for names, places, skills, and UI terminology.
+3. ✅ Game profiles saved automatically by target process.
+4. ✅ Per-game glossary support for names, places, skills, and UI terminology.
 5. Better line grouping and speaker-name detection.
-6. Translation batching so a dialogue box is translated as one semantic unit.
+6. ✅ Translation batching for multiple visible text regions.
 7. OCR confidence/debug overlay.
-8. Hotkeys for start/stop, freeze, retranslate, and hide overlay.
+8. ✅ Global hotkeys for start/stop, hide/show overlay, and cycling overlay mode. Freeze/retranslate remain future additions.
 
 This phase should make the tool genuinely comfortable for visual novels before broadening to every game genre.
 
@@ -83,21 +83,22 @@ Replace mode upgrades:
 
 Hybrid mode:
 
-- short UI strings replaced in-place
-- long dialogue shown as localized dialogue or subtitle
-- names and menu labels kept aligned with their original controls
+- ✅ Smart mode replaces precise/short UI strings in-place
+- ✅ Smart mode uses compact subtitles for long or poorly constrained text
+- ✅ source glyphs are masked before Smart subtitle fallback
+- names and menu labels remain aligned with their original controls when Unity layout metadata is available
 
 ## Phase 4 - Translation quality
 
-- persistent per-game glossary
-- translation memory
-- character-specific speaking style
+- ✅ persistent per-game glossary
+- ✅ persistent translation cache / lightweight translation memory
+- ✅ current-speaker context for local LLM prompts
 - scene and dialogue context memory
 - local LLM provider presets
 - OpenAI-compatible provider
 - DeepL, Azure, and Google provider plugins
-- batch translation
-- automatic language detection
+- ✅ batch translation
+- ✅ automatic source-language detection for adapter text
 - optional user correction that feeds translation memory
 
 ## Phase 5 - Performance
@@ -114,14 +115,14 @@ Targets:
 
 ## Phase 6 - Distribution
 
-- self-contained x64 release
+- ✅ self-contained x64 release packaging script
 - first-run OCR data installer
-- settings and profile UI
+- ✅ persistent settings and automatic per-game profiles
 - signed binaries
-- crash logging with opt-in diagnostics
+- ✅ privacy-safe local crash/status diagnostics
 - portable mode
 - update checker
-- release packaging via GitHub Actions
+- ✅ manual/tag-triggered GitHub Actions release artifact packaging
 
 ## Non-goals for now
 
