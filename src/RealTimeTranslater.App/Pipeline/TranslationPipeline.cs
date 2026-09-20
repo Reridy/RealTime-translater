@@ -265,7 +265,15 @@ public sealed class TranslationPipeline : IDisposable
                                         translated with
                                         {
                                             Bounds =
-                                                unityRegions[index].Bounds
+                                                unityRegions[index].Bounds,
+                                            LayoutBounds =
+                                                unityRegions[index].LayoutBounds,
+                                            ForegroundArgb =
+                                                unityRegions[index].ForegroundArgb,
+                                            SourceLineCount =
+                                                unityRegions[index].SourceLineCount,
+                                            SourceAlignment =
+                                                unityRegions[index].SourceAlignment
                                         })
                                     .ToArray();
                         }
@@ -628,7 +636,15 @@ public sealed class TranslationPipeline : IDisposable
                     translated with
                     {
                         Bounds =
-                            currentRegions[index].Bounds
+                            currentRegions[index].Bounds,
+                        LayoutBounds =
+                            currentRegions[index].LayoutBounds,
+                        ForegroundArgb =
+                            currentRegions[index].ForegroundArgb,
+                        SourceLineCount =
+                            currentRegions[index].SourceLineCount,
+                        SourceAlignment =
+                            currentRegions[index].SourceAlignment
                     })
                 .ToArray();
 
