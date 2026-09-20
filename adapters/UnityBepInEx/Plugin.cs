@@ -13,7 +13,7 @@ namespace RealTimeTranslater.UnityBepInEx;
 [BepInPlugin(
     "com.realtimetranslater.unityadapter",
     "RealTimeTranslater Unity Adapter",
-    "0.3.1")]
+    "0.4.0")]
 public sealed class Plugin : BaseUnityPlugin
 {
     private const int MaximumRegions = 128;
@@ -34,7 +34,7 @@ public sealed class Plugin : BaseUnityPlugin
 
         StartCoroutine(PublishLoop());
         Logger.LogInfo(
-            "RealTimeTranslater Unity Adapter 0.3.1 loaded; tight text bounds and faster text polling enabled.");
+            "RealTimeTranslater Unity Adapter 0.4.0 loaded; glyph bounds, layout bounds, and text style metadata enabled.");
     }
 
     private void OnDestroy()
@@ -131,22 +131,95 @@ public sealed class Plugin : BaseUnityPlugin
             return;
 
         ScreenRect rect;
+        ScreenRect layoutRect;
 
         if (graphic is TextMeshProUGUI tmp)
         {
-            if (!TryGetTightTextScreenRect(tmp, out rect) &&
-                !TryGetScreenRect(graphic, out rect))
+            var hasTightRect =
+                TryGetTightTextScreenRect(
+                    tmp,
+                    out rect);
+
+            var hasLayoutRect =
+                TryGetScreenRect(
+                    graphic,
+                    out layoutRect);
+
+            if (!hasTightRect &&
+                !hasLayoutRect)
             {
                 return;
             }
+
+            if (!hasTightRect)
+                rect = layoutRect;
+
+            if (!hasLayoutRect)
+                layoutRect = rect;
         }
-        else if (!TryGetScreenRect(graphic, out rect))
+        else
         {
-            return;
+            if (!TryGetScreenRect(
+                    graphic,
+                    out rect))
+            {
+                return;
+            }
+
+            layoutRect = rect;
         }
 
         if (rect.Width < 2 || rect.Height < 2)
             return;
+
+        var sourceLineCount = 1;
+        var sourceAlignment = string.Empty;
+
+        if (graphic is TextMeshProUGUI styleTmp)
+        {
+            try
+            {
+                styleTmp.ForceMeshUpdate(
+                    ignoreActiveState: false,
+                    forceTextReparsing: false);
+
+                sourceLineCount = Mathf.Max(
+                    1,
+                    styleTmp.textInfo == null
+                        ? 1
+                        : styleTmp.textInfo.lineCount);
+
+                sourceAlignment =
+                    styleTmp.alignment.ToString();
+            }
+            catch
+            {
+                sourceLineCount = 1;
+                sourceAlignment = string.Empty;
+            }
+        }
+        else if (graphic is Text legacyText)
+        {
+            try
+            {
+                sourceLineCount = Mathf.Max(
+                    1,
+                    legacyText.cachedTextGenerator == null
+                        ? 1
+                        : legacyText.cachedTextGenerator.lineCount);
+            }
+            catch
+            {
+                sourceLineCount = 1;
+            }
+
+            sourceAlignment =
+                legacyText.alignment.ToString();
+        }
+
+        var foregroundArgb =
+            PackArgb(
+                graphic.color);
 
         var hierarchy = BuildHierarchyPath(graphic.transform);
         var selectable = graphic.GetComponentInParent<Selectable>();
@@ -174,7 +247,14 @@ public sealed class Plugin : BaseUnityPlugin
             X = rect.X,
             Y = rect.Y,
             Width = rect.Width,
-            Height = rect.Height
+            Height = rect.Height,
+            LayoutX = layoutRect.X,
+            LayoutY = layoutRect.Y,
+            LayoutWidth = layoutRect.Width,
+            LayoutHeight = layoutRect.Height,
+            ForegroundArgb = foregroundArgb,
+            SourceLineCount = sourceLineCount,
+            SourceAlignment = sourceAlignment
         });
     }
 
@@ -493,7 +573,7 @@ public sealed class Plugin : BaseUnityPlugin
     {
         var builder = new StringBuilder(4096);
 
-        builder.Append("{\"protocol\":1,\"screenWidth\":");
+        builder.Append("{\"protocol\":2,\"screenWidth\":");
         builder.Append(Screen.width);
         builder.Append(",\"screenHeight\":");
         builder.Append(Screen.height);
@@ -532,11 +612,45 @@ public sealed class Plugin : BaseUnityPlugin
             builder.Append(region.Width);
             builder.Append(",\"height\":");
             builder.Append(region.Height);
-            builder.Append('}');
+            builder.Append(",\"layoutX\":");
+            builder.Append(region.LayoutX);
+            builder.Append(",\"layoutY\":");
+            builder.Append(region.LayoutY);
+            builder.Append(",\"layoutWidth\":");
+            builder.Append(region.LayoutWidth);
+            builder.Append(",\"layoutHeight\":");
+            builder.Append(region.LayoutHeight);
+            builder.Append(",\"foregroundArgb\":");
+            builder.Append(region.ForegroundArgb);
+            builder.Append(",\"sourceLineCount\":");
+            builder.Append(region.SourceLineCount);
+            builder.Append(",\"sourceAlignment\":\"");
+            AppendJsonString(builder, region.SourceAlignment);
+            builder.Append("\"}");
         }
 
         builder.Append("]}");
         return builder.ToString();
+    }
+
+    private static int PackArgb(
+        Color color)
+    {
+        var alpha = Mathf.RoundToInt(
+            Mathf.Clamp01(color.a) * 255f);
+        var red = Mathf.RoundToInt(
+            Mathf.Clamp01(color.r) * 255f);
+        var green = Mathf.RoundToInt(
+            Mathf.Clamp01(color.g) * 255f);
+        var blue = Mathf.RoundToInt(
+            Mathf.Clamp01(color.b) * 255f);
+
+        return unchecked(
+            (int)(
+                ((uint)alpha << 24) |
+                ((uint)red << 16) |
+                ((uint)green << 8) |
+                (uint)blue));
     }
 
     private static void AppendJsonString(
@@ -598,6 +712,13 @@ public sealed class Plugin : BaseUnityPlugin
         public int Y;
         public int Width;
         public int Height;
+        public int LayoutX;
+        public int LayoutY;
+        public int LayoutWidth;
+        public int LayoutHeight;
+        public int ForegroundArgb;
+        public int SourceLineCount;
+        public string SourceAlignment;
     }
 
     private struct ScreenRect
