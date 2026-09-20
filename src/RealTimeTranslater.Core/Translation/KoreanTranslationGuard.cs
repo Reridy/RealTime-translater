@@ -33,7 +33,8 @@ public static partial class KoreanTranslationGuard
 
     public static bool IsAcceptable(
         string source,
-        string candidate)
+        string candidate,
+        string sourceLanguage = "auto")
     {
         var rawCandidate = candidate;
 
@@ -63,12 +64,21 @@ public static partial class KoreanTranslationGuard
 
         var hangul = candidate.Count(IsHangul);
         var han = candidate.Count(IsHan);
+        var kana = candidate.Count(IsKana);
 
         if (source.Length >= 12 && hangul < 3)
             return false;
 
-        if (han > 0)
+        if (han > 0 ||
+            kana > 0)
+        {
             return false;
+        }
+
+        sourceLanguage =
+            ResolveSourceLanguage(
+                source,
+                sourceLanguage);
 
         var sourceLetters = source.Count(char.IsLetter);
         var candidateLetters = candidate.Count(char.IsLetter);
@@ -89,7 +99,10 @@ public static partial class KoreanTranslationGuard
 
         foreach (var token in latinTokens)
         {
-            if (IsAllowedLatinToken(source, token))
+            if (IsAllowedLatinToken(
+                    source,
+                    token,
+                    sourceLanguage))
                 continue;
 
             return false;
@@ -129,20 +142,57 @@ public static partial class KoreanTranslationGuard
 
     private static bool IsAllowedLatinToken(
         string source,
-        string token)
+        string token,
+        string sourceLanguage)
     {
         if (token.Length <= 1)
             return true;
 
+        // Short game/UI abbreviations such as AP/HP may remain in any source
+        // language when they were already present in the source.
         if (token.Length <= 6 &&
-            token.All(ch => char.IsUpper(ch) || char.IsDigit(ch)) &&
-            source.Contains(token, StringComparison.OrdinalIgnoreCase))
+            token.All(ch =>
+                char.IsUpper(ch) ||
+                char.IsDigit(ch)) &&
+            source.Contains(
+                token,
+                StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
+        // Only an English source may deliberately preserve difficult English
+        // fragments in the Korean localization. This covers proper names,
+        // stylized coined terms such as NukuNuku, and stutters such as
+        // R-Really. For Japanese/Chinese/etc. we require Korean translation
+        // or Korean phonetic rendering instead of leaking the foreign script.
+        if (!string.Equals(
+                sourceLanguage,
+                "en",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!source.Contains(
+                token,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         if (char.IsUpper(token[0]) &&
-            source.Contains(token, StringComparison.Ordinal))
+            source.Contains(
+                token,
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (StutteredEnglishTokenRegex().IsMatch(
+                token) ||
+            CamelCaseTokenRegex().IsMatch(
+                token))
         {
             return true;
         }
@@ -244,6 +294,41 @@ public static partial class KoreanTranslationGuard
         => ch is >= '\uAC00' and <= '\uD7A3'
             or >= '\u3131' and <= '\u318E';
 
+    private static bool IsKana(char ch)
+        => ch is >= '\u3040' and <= '\u30FF'
+            or >= '\u31F0' and <= '\u31FF';
+
+    private static string ResolveSourceLanguage(
+        string source,
+        string configured)
+    {
+        if (!string.Equals(
+                configured,
+                "auto",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return configured;
+        }
+
+        if (source.Any(IsKana))
+            return "ja";
+
+        if (source.Any(IsHan))
+            return "zh";
+
+        if (source.Any(ch =>
+                ch is >= 'A' and <= 'Z' ||
+                ch is >= 'a' and <= 'z'))
+        {
+            return "en";
+        }
+
+        if (source.Any(IsHangul))
+            return "ko";
+
+        return "auto";
+    }
+
     private static bool IsHan(char ch)
         => ch is >= '\u3400' and <= '\u4DBF'
             or >= '\u4E00' and <= '\u9FFF';
@@ -271,6 +356,12 @@ public static partial class KoreanTranslationGuard
 
     [GeneratedRegex(@"(.{2,14})\1{3,}")]
     private static partial Regex RepeatedPhraseRegex();
+
+    [GeneratedRegex(@"^(?<lead>[A-Za-z])-(?i:\k<lead>)[A-Za-z'-]+$")]
+    private static partial Regex StutteredEnglishTokenRegex();
+
+    [GeneratedRegex(@"^[A-Z][a-z]+(?:[A-Z][a-z]+)+$")]
+    private static partial Regex CamelCaseTokenRegex();
 
     [GeneratedRegex(@"[A-Za-z][A-Za-z'-]*")]
     private static partial Regex LatinWordRegex();
