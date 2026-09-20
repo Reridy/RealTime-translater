@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using RealTimeTranslater.App.Capture;
 using RealTimeTranslater.App.Configuration;
 using RealTimeTranslater.App.Ocr;
@@ -25,6 +26,12 @@ public partial class MainWindow : Window
     private TesseractOcrService? _ocrService;
     private string _activeProfileKey = string.Empty;
     private bool _applyingGameProfile;
+    private HwndSource? _mainWindowSource;
+    private bool _overlayTemporarilyHidden;
+
+    private const int ToggleOverlayHotkeyId = 0x511;
+    private const int ToggleRunHotkeyId = 0x512;
+    private const int CycleOverlayModeHotkeyId = 0x513;
 
     private static readonly TargetLanguageOption[] TargetLanguages =
     {
@@ -108,6 +115,159 @@ public partial class MainWindow : Window
         RefreshWindows();
     }
 
+    protected override void OnSourceInitialized(
+        EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+
+        var handle =
+            new WindowInteropHelper(this).Handle;
+
+        _mainWindowSource =
+            HwndSource.FromHwnd(handle);
+
+        _mainWindowSource?.AddHook(
+            MainWindowMessageHook);
+
+        var modifiers =
+            NativeMethods.ModControl |
+            NativeMethods.ModShift |
+            NativeMethods.ModNoRepeat;
+
+        _ = NativeMethods.RegisterHotKey(
+            handle,
+            ToggleOverlayHotkeyId,
+            modifiers,
+            NativeMethods.VkF8);
+
+        _ = NativeMethods.RegisterHotKey(
+            handle,
+            ToggleRunHotkeyId,
+            modifiers,
+            NativeMethods.VkF9);
+
+        _ = NativeMethods.RegisterHotKey(
+            handle,
+            CycleOverlayModeHotkeyId,
+            modifiers,
+            NativeMethods.VkF10);
+    }
+
+    private IntPtr MainWindowMessageHook(
+        IntPtr hwnd,
+        int message,
+        IntPtr wParam,
+        IntPtr lParam,
+        ref bool handled)
+    {
+        if (message !=
+            NativeMethods.WmHotkey)
+        {
+            return IntPtr.Zero;
+        }
+
+        handled = true;
+
+        switch (wParam.ToInt32())
+        {
+            case ToggleOverlayHotkeyId:
+                ToggleOverlayVisibility();
+                break;
+
+            case ToggleRunHotkeyId:
+                _ = Dispatcher.BeginInvoke(
+                    async () =>
+                    {
+                        if (_runCancellation is null)
+                        {
+                            StartButton_Click(
+                                this,
+                                new RoutedEventArgs());
+                        }
+                        else
+                        {
+                            await StopInternalAsync();
+                        }
+                    });
+                break;
+
+            case CycleOverlayModeHotkeyId:
+                CycleOverlayMode();
+                break;
+        }
+
+        return IntPtr.Zero;
+    }
+
+    private void ToggleOverlayVisibility()
+    {
+        if (_overlayWindow is null)
+        {
+            StatusTextBlock.Text =
+                "Overlay is not running.";
+            return;
+        }
+
+        _overlayTemporarilyHidden =
+            !_overlayTemporarilyHidden;
+
+        if (_overlayTemporarilyHidden)
+        {
+            _overlayWindow.Hide();
+            StatusTextBlock.Text =
+                "Overlay hidden · Ctrl+Shift+F8 to show";
+        }
+        else
+        {
+            _overlayWindow.Show();
+            StatusTextBlock.Text =
+                "Overlay visible";
+        }
+    }
+
+    private void CycleOverlayMode()
+    {
+        var modes =
+            new[]
+            {
+                "Smart",
+                "Replace",
+                "Subtitle"
+            };
+
+        var current =
+            OverlayModeComboBox.SelectedItem?.ToString()
+            ?? _settings.Overlay.Mode;
+
+        var index =
+            Array.FindIndex(
+                modes,
+                mode =>
+                    string.Equals(
+                        mode,
+                        current,
+                        StringComparison.OrdinalIgnoreCase));
+
+        var next =
+            modes[
+                (Math.Max(
+                    0,
+                    index) + 1) %
+                modes.Length];
+
+        OverlayModeComboBox.SelectedItem =
+            next;
+
+        _settings.Overlay.Mode =
+            next;
+
+        SaveActiveGameProfile();
+        _settings.Save();
+
+        StatusTextBlock.Text =
+            $"Overlay mode: {next}";
+    }
+
     private void MainWindow_Loaded(
         object sender,
         RoutedEventArgs e)
@@ -170,6 +330,26 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        var handle =
+            new WindowInteropHelper(this).Handle;
+
+        if (handle != IntPtr.Zero)
+        {
+            _ = NativeMethods.UnregisterHotKey(
+                handle,
+                ToggleOverlayHotkeyId);
+            _ = NativeMethods.UnregisterHotKey(
+                handle,
+                ToggleRunHotkeyId);
+            _ = NativeMethods.UnregisterHotKey(
+                handle,
+                CycleOverlayModeHotkeyId);
+        }
+
+        _mainWindowSource?.RemoveHook(
+            MainWindowMessageHook);
+        _mainWindowSource = null;
+
         CaptureCurrentSettings();
         SaveActiveGameProfile();
         _settings.Save();
@@ -300,6 +480,7 @@ public partial class MainWindow : Window
             }
 
             _overlayWindow = new OverlayWindow(_settings.Overlay);
+            _overlayTemporarilyHidden = false;
             _overlayWindow.Show();
 
             _runCancellation = new CancellationTokenSource();
