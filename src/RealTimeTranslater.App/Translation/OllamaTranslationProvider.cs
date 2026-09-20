@@ -593,13 +593,27 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         var prompt =
             new StringBuilder();
 
+        var combinedSource =
+            string.Join(
+                "\n",
+                items.Select(item =>
+                    item.Text));
+
         var glossaryContext =
             BuildGlossaryContext(
                 context,
-                string.Join(
-                    "\n",
-                    items.Select(item =>
-                        item.Text)));
+                combinedSource);
+
+        var speakerContext =
+            BuildSpeakerContext(
+                context);
+
+        if (!string.IsNullOrWhiteSpace(
+                speakerContext))
+        {
+            prompt.AppendLine(
+                $"Speaker context: {speakerContext}");
+        }
 
         if (!string.IsNullOrWhiteSpace(
                 glossaryContext))
@@ -724,6 +738,10 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 context,
                 sourceText);
 
+        var speakerContext =
+            BuildSpeakerContext(
+                context);
+
         var payload = new
         {
             model = _model,
@@ -768,6 +786,9 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                         (string.IsNullOrWhiteSpace(glossaryContext)
                             ? string.Empty
                             : $"Mandatory glossary: {glossaryContext}. ") +
+                        (string.IsNullOrWhiteSpace(speakerContext)
+                            ? string.Empty
+                            : $"{speakerContext}. ") +
                         "\n\n" +
                         sourceText
                 }
@@ -808,10 +829,20 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 ? string.Empty
                 : $" Mandatory glossary: {glossaryContext}. Use those target terms exactly.";
 
+        var speakerContext =
+            BuildSpeakerContext(
+                context);
+
+        var speakerInstruction =
+            string.IsNullOrWhiteSpace(
+                speakerContext)
+                ? string.Empty
+                : $" {speakerContext}.";
+
         var prompt = strict
-            ? $"Translate this {sourceName} text to {targetName}. Output only the complete {targetName} translation. {preservation}{glossaryInstruction} Do not explain, repeat, continue, or omit.\n\n" +
+            ? $"Translate this {sourceName} text to {targetName}. Output only the complete {targetName} translation. {preservation}{glossaryInstruction}{speakerInstruction} Do not explain, repeat, continue, or omit.\n\n" +
               sourceText
-            : $"Translate {sourceName} to natural {targetName}. Preserve meaning, tone, hesitation, negation, and names. {preservation}{glossaryInstruction} Output only the translation.\n\n" +
+            : $"Translate {sourceName} to natural {targetName}. Preserve meaning, tone, hesitation, negation, and names. {preservation}{glossaryInstruction}{speakerInstruction} Output only the translation.\n\n" +
               sourceText;
 
         var payload = new
