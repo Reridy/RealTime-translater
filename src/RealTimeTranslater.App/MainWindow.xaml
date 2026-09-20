@@ -129,6 +129,18 @@
                         <ColumnDefinition Width="150" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               Text="Translation mode" />
+                    <ComboBox x:Name="TranslationModeComboBox"
+                              Grid.Column="1"
+                              MinHeight="28"
+                              ToolTip="Fast reduces local model latency, Balanced is the default, Quality allows a larger generation budget." />
+                </Grid>
+                <Grid Margin="0,3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
                     <TextBlock VerticalAlignment="Top"
                                Margin="0,5,0,0"
                                Text="Game glossary" />
