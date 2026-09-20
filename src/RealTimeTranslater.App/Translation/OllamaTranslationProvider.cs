@@ -270,10 +270,37 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 }
             }
 
-            throw new InvalidOperationException(
-                "TranslateGemma batch translation failed: " +
-                (lastError?.Message ?? "unknown error"),
-                lastError);
+            try
+            {
+                for (var i = 0; i < pending.Count; i++)
+                {
+                    var item =
+                        pending[i];
+
+                    results[item.Index] =
+                        await TranslateWithTranslateGemmaAsync(
+                            item.Request.Text,
+                            item.SourceLanguage,
+                            item.Request.TargetLanguage,
+                            translationBudget.Token);
+                }
+
+                return results;
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+                when (ex is HttpRequestException or
+                    InvalidOperationException or
+                    TimeoutException)
+            {
+                throw new InvalidOperationException(
+                    "TranslateGemma batch recovery failed.",
+                    ex);
+            }
         }
         catch (OperationCanceledException)
             when (!cancellationToken.IsCancellationRequested)
@@ -318,8 +345,23 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     return translated;
                 }
 
-                lastError = new InvalidOperationException(
-                    "TranslateGemma returned output that failed Korean quality validation.");
+                var recovered =
+                    KoreanTranslationGuard
+                        .RecoverBestKoreanLine(
+                            translated);
+
+                if (!string.IsNullOrWhiteSpace(
+                        recovered) &&
+                    KoreanTranslationGuard.IsAcceptable(
+                        sourceText,
+                        recovered))
+                {
+                    return recovered;
+                }
+
+                lastError =
+                    new InvalidOperationException(
+                        "TranslateGemma output did not pass Korean quality checks.");
             }
             catch (OperationCanceledException)
                 when (cancellationToken.IsCancellationRequested)
@@ -337,14 +379,64 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             if (attempt == 0)
             {
                 await Task.Delay(
-                    120,
+                    90,
                     cancellationToken);
             }
         }
 
+        try
+        {
+            var repaired =
+                await RequestTranslateGemmaRepairAsync(
+                    sourceText,
+                    sourceLanguage,
+                    targetLanguage,
+                    cancellationToken);
+
+            repaired =
+                KoreanTranslationGuard.Normalize(
+                    repaired);
+
+            if (KoreanTranslationGuard.IsAcceptable(
+                    sourceText,
+                    repaired))
+            {
+                return repaired;
+            }
+
+            var recovered =
+                KoreanTranslationGuard
+                    .RecoverBestKoreanLine(
+                        repaired);
+
+            if (!string.IsNullOrWhiteSpace(
+                    recovered) &&
+                KoreanTranslationGuard.IsAcceptable(
+                    sourceText,
+                    recovered))
+            {
+                return recovered;
+            }
+
+            lastError =
+                new InvalidOperationException(
+                    "Structured recovery output did not pass Korean quality checks.");
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+            when (ex is HttpRequestException or
+                InvalidOperationException or
+                TimeoutException)
+        {
+            lastError = ex;
+        }
+
         throw new InvalidOperationException(
-            "TranslateGemma translation failed after retry: " +
-            (lastError?.Message ?? "unknown error"),
+            "TranslateGemma could not produce a safe Korean translation.",
             lastError);
     }
 
@@ -568,6 +660,65 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
 
         throw new InvalidOperationException(
             "TranslateGemma batch response did not contain a translations array.");
+    }
+
+    private async Task<string> RequestTranslateGemmaRepairAsync(
+        string sourceText,
+        string sourceLanguage,
+        string targetLanguage,
+        CancellationToken cancellationToken)
+    {
+        var sourceName =
+            LanguageName(sourceLanguage);
+        var targetName =
+            LanguageName(targetLanguage);
+
+        var payload = new
+        {
+            model = _model,
+            stream = false,
+            keep_alive = "2h",
+            format = new
+            {
+                type = "object",
+                properties = new
+                {
+                    translation = new
+                    {
+                        type = "string"
+                    }
+                },
+                required = new[] { "translation" },
+                additionalProperties = false
+            },
+            options = new
+            {
+                temperature = 0.0,
+                num_ctx = 640,
+                num_predict =
+                    TranslateGemmaOutputBudget(
+                        sourceText,
+                        160),
+                repeat_penalty = 1.14
+            },
+            messages = new object[]
+            {
+                new
+                {
+                    role = "user",
+                    content =
+                        $"Translate this {sourceName} text to natural {targetName}. " +
+                        $"Return exactly one JSON object with the field translation. " +
+                        $"The value must contain only the complete {targetName} translation. " +
+                        $"Do not explain, repeat the source, continue the dialogue, or mix another language.\n\n" +
+                        sourceText
+                }
+            }
+        };
+
+        return await SendChatAsync(
+            payload,
+            cancellationToken);
     }
 
     private async Task<string> RequestTranslateGemmaAsync(
