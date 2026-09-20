@@ -100,6 +100,9 @@ public partial class MainWindow : Window
                     StringComparison.OrdinalIgnoreCase))
             ?? TargetLanguages[0];
 
+        GlossaryTextBox.Text =
+            _settings.Translation.GlossaryText;
+
         OverlayModeComboBox.ItemsSource = new[]
         {
             "Smart",
@@ -416,6 +419,8 @@ public partial class MainWindow : Window
                 providerName;
             _settings.Translation.TargetLanguage =
                 targetLanguage;
+            _settings.Translation.GlossaryText =
+                GlossaryTextBox.Text;
 
             var configuredEndpoint =
                 EndpointTextBox.Text.Trim();
@@ -686,6 +691,9 @@ public partial class MainWindow : Window
             AllowScreenshotsCheckBox.IsChecked =
                 profile.AllowScreenshots;
 
+            GlossaryTextBox.Text =
+                profile.GlossaryText;
+
             UpdateUnityScopeAvailability();
             SetEndpointForSelectedProvider();
         }
@@ -751,7 +759,9 @@ public partial class MainWindow : Window
                     OverlayModeComboBox.SelectedItem?.ToString()
                     ?? _settings.Overlay.Mode,
                 AllowScreenshots =
-                    AllowScreenshotsCheckBox.IsChecked == true
+                    AllowScreenshotsCheckBox.IsChecked == true,
+                GlossaryText =
+                    GlossaryTextBox.Text
             };
 
         _settings.LastTargetProfileKey =
@@ -789,6 +799,9 @@ public partial class MainWindow : Window
             (TargetLanguageComboBox.SelectedItem
                 as TargetLanguageOption)?.Code
             ?? _settings.Translation.TargetLanguage;
+
+        _settings.Translation.GlossaryText =
+            GlossaryTextBox.Text;
 
         var endpoint =
             EndpointTextBox.Text.Trim();
