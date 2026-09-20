@@ -77,6 +77,18 @@ public partial class MainWindow : Window
         };
         OcrLanguageComboBox.SelectedItem = _settings.OcrLanguage;
 
+        OcrRegionComboBox.ItemsSource = new[]
+        {
+            "Full window",
+            "Bottom 45%",
+            "Bottom 30%",
+            "Center 70%"
+        };
+        OcrRegionComboBox.SelectedItem =
+            OcrRegionComboBox.Items.Contains(_settings.OcrRegion)
+                ? _settings.OcrRegion
+                : "Full window";
+
         TextSourceComboBox.ItemsSource = new[]
         {
             "OCR",
@@ -426,6 +438,9 @@ public partial class MainWindow : Window
                 ?? _settings.Translation.TargetLanguage;
 
             _settings.OcrLanguage = ocrLanguage;
+            _settings.OcrRegion =
+                OcrRegionComboBox.SelectedItem?.ToString()
+                ?? "Full window";
             _settings.TextSource =
                 TextSourceComboBox.SelectedItem?.ToString()
                 ?? "OCR";
@@ -752,6 +767,13 @@ public partial class MainWindow : Window
                     profile.OcrLanguage;
             }
 
+            if (OcrRegionComboBox.Items.Contains(
+                    profile.OcrRegion))
+            {
+                OcrRegionComboBox.SelectedItem =
+                    profile.OcrRegion;
+            }
+
             if (TextSourceComboBox.Items.Contains(
                     profile.TextSource))
             {
@@ -849,6 +871,9 @@ public partial class MainWindow : Window
                 OcrLanguage =
                     OcrLanguageComboBox.SelectedItem?.ToString()
                     ?? _settings.OcrLanguage,
+                OcrRegion =
+                    OcrRegionComboBox.SelectedItem?.ToString()
+                    ?? _settings.OcrRegion,
                 TextSource =
                     TextSourceComboBox.SelectedItem?.ToString()
                     ?? _settings.TextSource,
@@ -884,6 +909,10 @@ public partial class MainWindow : Window
         _settings.OcrLanguage =
             OcrLanguageComboBox.SelectedItem?.ToString()
             ?? _settings.OcrLanguage;
+
+        _settings.OcrRegion =
+            OcrRegionComboBox.SelectedItem?.ToString()
+            ?? _settings.OcrRegion;
 
         _settings.TextSource =
             TextSourceComboBox.SelectedItem?.ToString()
