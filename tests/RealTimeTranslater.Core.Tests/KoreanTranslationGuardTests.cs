@@ -100,11 +100,7 @@ public sealed class KoreanTranslationGuardTests
         "暖呼呼就是它的名字。",
         "이름은 暖呼呼야.",
         "zh")]
-    [InlineData(
-        "これはNukuNukuと呼ばれている。",
-        "이건 NukuNuku라고 불려.",
-        "ja")]
-    public void RejectsUntranslatedForeignLanguageFragments(
+    public void RejectsUntranslatedForeignScriptFragments(
         string source,
         string candidate,
         string sourceLanguage)
@@ -114,6 +110,17 @@ public sealed class KoreanTranslationGuardTests
                 source,
                 candidate,
                 sourceLanguage));
+    }
+
+
+    [Fact]
+    public void AllowsEmbeddedEnglishCoinedTermInsideJapaneseSource()
+    {
+        Assert.True(
+            KoreanTranslationGuard.IsAcceptable(
+                "これはNukuNukuと呼ばれている。",
+                "이건 NukuNuku라고 불려.",
+                "ja"));
     }
 
     [Fact]
