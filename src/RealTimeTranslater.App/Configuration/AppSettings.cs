@@ -15,6 +15,8 @@ public sealed class AppSettings
     public float MinimumOcrConfidence { get; set; } = 45f;
     public TranslationSettings Translation { get; set; } = new();
     public OverlaySettings Overlay { get; set; } = new();
+    public string LastTargetProfileKey { get; set; } = string.Empty;
+    public Dictionary<string, GameProfileSettings> GameProfiles { get; set; } = new();
 
     public static AppSettings Load()
     {
@@ -118,4 +120,16 @@ public sealed class OverlaySettings
     public double SubtitleMaxWidthRatio { get; set; } = 0.74;
     public double SubtitleBottomMargin { get; set; } = 18;
     public bool AllowScreenshots { get; set; } = false;
+}
+
+public sealed class GameProfileSettings
+{
+    public string OcrLanguage { get; set; } = "jpn+eng";
+    public string TextSource { get; set; } = "OCR";
+    public bool UnityDialogueOnly { get; set; } = true;
+    public string TargetLanguage { get; set; } = "ko";
+    public string Provider { get; set; } = "Ollama";
+    public string OllamaModel { get; set; } = "translategemma:4b";
+    public string OverlayMode { get; set; } = "Smart";
+    public bool AllowScreenshots { get; set; }
 }
