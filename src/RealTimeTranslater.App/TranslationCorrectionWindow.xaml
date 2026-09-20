@@ -1,0 +1,67 @@
+<Window x:Class="RealTimeTranslater.App.TranslationCorrectionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Correct Translation"
+        Width="640"
+        Height="390"
+        MinWidth="520"
+        MinHeight="330"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Margin="0,0,0,10"
+                   FontSize="18"
+                   FontWeight="SemiBold"
+                   Text="Correct the current translation" />
+
+        <ComboBox x:Name="EntryComboBox"
+                  Grid.Row="1"
+                  MinHeight="30"
+                  Margin="0,0,0,12"
+                  SelectionChanged="EntryComboBox_SelectionChanged" />
+
+        <GroupBox Grid.Row="2"
+                  Header="Source"
+                  Margin="0,0,0,10">
+            <TextBox x:Name="SourceTextBox"
+                     Margin="8"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto" />
+        </GroupBox>
+
+        <GroupBox Grid.Row="3"
+                  Header="Translation">
+            <TextBox x:Name="TranslationTextBox"
+                     Margin="8"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto" />
+        </GroupBox>
+
+        <StackPanel Grid.Row="4"
+                    Margin="0,12,0,0"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right">
+            <Button Width="100"
+                    Height="32"
+                    Margin="0,0,8,0"
+                    IsCancel="True"
+                    Content="Cancel" />
+            <Button Width="120"
+                    Height="32"
+                    IsDefault="True"
+                    Click="SaveButton_Click"
+                    Content="Save correction" />
+        </StackPanel>
+    </Grid>
+</Window>
