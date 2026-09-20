@@ -120,6 +120,18 @@ public partial class MainWindow : Window
                     StringComparison.OrdinalIgnoreCase))
             ?? TargetLanguages[0];
 
+        TranslationModeComboBox.ItemsSource = new[]
+        {
+            "Fast",
+            "Balanced",
+            "Quality"
+        };
+        TranslationModeComboBox.SelectedItem =
+            TranslationModeComboBox.Items.Contains(
+                _settings.Translation.Mode)
+                ? _settings.Translation.Mode
+                : "Balanced";
+
         GlossaryTextBox.Text =
             _settings.Translation.GlossaryText;
 
@@ -455,6 +467,9 @@ public partial class MainWindow : Window
                 providerName;
             _settings.Translation.TargetLanguage =
                 targetLanguage;
+            _settings.Translation.Mode =
+                TranslationModeComboBox.SelectedItem?.ToString()
+                ?? "Balanced";
             _settings.Translation.GlossaryText =
                 GlossaryTextBox.Text;
 
@@ -797,6 +812,13 @@ public partial class MainWindow : Window
                     targetLanguage;
             }
 
+            if (TranslationModeComboBox.Items.Contains(
+                    profile.TranslationMode))
+            {
+                TranslationModeComboBox.SelectedItem =
+                    profile.TranslationMode;
+            }
+
             if (ProviderComboBox.Items.Contains(
                     profile.Provider))
             {
@@ -881,6 +903,9 @@ public partial class MainWindow : Window
                     UnityDialogueOnlyCheckBox.IsChecked == true,
                 TargetLanguage =
                     targetLanguage,
+                TranslationMode =
+                    TranslationModeComboBox.SelectedItem?.ToString()
+                    ?? _settings.Translation.Mode,
                 Provider =
                     ProviderComboBox.SelectedItem?.ToString()
                     ?? _settings.Translation.Provider,
@@ -937,6 +962,10 @@ public partial class MainWindow : Window
                 as TargetLanguageOption)?.Code
             ?? _settings.Translation.TargetLanguage;
 
+        _settings.Translation.Mode =
+            TranslationModeComboBox.SelectedItem?.ToString()
+            ?? _settings.Translation.Mode;
+
         _settings.Translation.GlossaryText =
             GlossaryTextBox.Text;
 
@@ -981,7 +1010,9 @@ public partial class MainWindow : Window
                     : endpoint,
                 model.Length == 0
                     ? _settings.Translation.OllamaModel
-                    : model),
+                    : model,
+                TranslationModeComboBox.SelectedItem?.ToString()
+                    ?? _settings.Translation.Mode),
 
             "LibreTranslate" => new LibreTranslateProvider(
                 _httpClient,
