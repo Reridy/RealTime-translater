@@ -30,6 +30,9 @@ public sealed class TranslationPipeline : IDisposable
         new(StringComparer.Ordinal);
 
     private string _lastUnityTextKey = string.Empty;
+    private IReadOnlyList<string> _lastVisibleSourceTexts =
+        Array.Empty<string>();
+    private int _retranslateRequested;
     private IReadOnlyList<TranslatedRegion> _lastUnityTranslations =
         Array.Empty<TranslatedRegion>();
     private double? _lastUnityTranslationMilliseconds;
@@ -116,6 +119,33 @@ public sealed class TranslationPipeline : IDisposable
                 var loopStart = Stopwatch.GetTimestamp();
                 var adapterSemanticOcrFallback = false;
 
+                if (Interlocked.Exchange(
+                        ref _retranslateRequested,
+                        0) != 0)
+                {
+                    var removed =
+                        _translator.Invalidate(
+                            new[]
+                            {
+                                "auto",
+                                _sourceLanguage
+                            },
+                            _targetLanguage,
+                            _lastVisibleSourceTexts);
+
+                    CancelUnityTranslation();
+                    ResetUnityTextState();
+                    _stabilizer.Reset();
+
+                    forcedOcrFrames =
+                        Math.Max(
+                            forcedOcrFrames,
+                            _settings.StabilityFrames);
+
+                    StatusChanged?.Invoke(
+                        $"Retranslate requested · invalidated {removed} cached entr{(removed == 1 ? "y" : "ies")}");
+                }
+
                 using var frame = await _capture.CaptureAsync(
                     _targetWindow,
                     cancellationToken);
@@ -160,6 +190,17 @@ public sealed class TranslationPipeline : IDisposable
                         frame);
 
                     if (unityRegions.Count > 0)
+                    {
+                        _lastVisibleSourceTexts =
+                            unityRegions
+                                .Select(region =>
+                                    region.Text)
+                                .Where(text =>
+                                    !string.IsNullOrWhiteSpace(text))
+                                .Distinct(
+                                    StringComparer.Ordinal)
+                                .ToArray();
+
                     {
                         var unityTextKey = BuildTextKey(
                             unityRegions);
@@ -403,6 +444,16 @@ public sealed class TranslationPipeline : IDisposable
 
                     if (stableRegions is not null)
                     {
+                        _lastVisibleSourceTexts =
+                            stableRegions
+                                .Select(region =>
+                                    region.Text)
+                                .Where(text =>
+                                    !string.IsNullOrWhiteSpace(text))
+                                .Distinct(
+                                    StringComparer.Ordinal)
+                                .ToArray();
+
                         try
                         {
                             var translated =
@@ -499,6 +550,13 @@ public sealed class TranslationPipeline : IDisposable
                 }
             }
         }
+    }
+
+    public void RequestRetranslateCurrent()
+    {
+        Interlocked.Exchange(
+            ref _retranslateRequested,
+            1);
     }
 
     public void Dispose()
