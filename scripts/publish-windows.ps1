@@ -45,6 +45,11 @@ New-Item -ItemType Directory -Force -Path $publishedTessdata | Out-Null
 Copy-Item (Join-Path $tessdata "eng.traineddata") $publishedTessdata -Force
 Copy-Item (Join-Path $tessdata "jpn.traineddata") $publishedTessdata -Force
 
+$publishedDocs = Join-Path $publishDir "docs"
+New-Item -ItemType Directory -Force -Path $publishedDocs | Out-Null
+Copy-Item (Join-Path $repo "docs\UNITY_ADAPTER.md") $publishedDocs -Force
+Copy-Item (Join-Path $PSScriptRoot "setup-recommended-translation-model.ps1") $publishDir -Force
+
 $readme = @"
 RealTime Translater - Windows x64
 ================================
