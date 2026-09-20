@@ -244,7 +244,7 @@
                 <TextBlock Grid.Row="2"
                            Foreground="Gray"
                            TextWrapping="Wrap"
-                           Text="Tip: Smart overlay adapts between native replacement and subtitles. Hotkeys: Ctrl+Shift+F8 hide/show overlay · F9 start/stop · F10 cycle overlay mode." />
+                           Text="Tip: Smart overlay adapts between native replacement and subtitles. Hotkeys: Ctrl+Shift+F8 hide/show overlay · Ctrl+Shift+F9 start/stop · Ctrl+Shift+F10 cycle overlay mode." />
             </Grid>
         </Border>
 
