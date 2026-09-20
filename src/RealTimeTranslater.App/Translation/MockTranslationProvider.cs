@@ -14,7 +14,7 @@ public sealed class MockTranslationProvider : ITranslationProvider
 
         var target =
             TranslationQualityGuard
-                .NormalizeLanguageCode(
+                .NormalizeFullLanguageCode(
                     request.TargetLanguage)
                 .ToUpperInvariant();
 
