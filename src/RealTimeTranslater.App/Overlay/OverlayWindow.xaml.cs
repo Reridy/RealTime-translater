@@ -75,6 +75,11 @@ public partial class OverlayWindow : Window
             sourceText.Length >= 42 ||
             sourceLineEstimate >= 2;
 
+        var prefersLeftAlignment =
+            looksLikeLongContent ||
+            sourceWidth >= Width * 0.24 ||
+            sourceText.Length >= 24;
+
         // Tight replace mode deliberately masks only the rendered source
         // glyph area plus a tiny safety margin. The adapter now supplies
         // TextMeshPro's actual text bounds instead of the whole RectTransform.
@@ -145,7 +150,7 @@ public partial class OverlayWindow : Window
             minimumFontSize,
             availableWidth,
             availableHeight,
-            topAligned: looksLikeLongContent);
+            topAligned: prefersLeftAlignment);
 
         var replaceBackground =
             ResolveReplaceBackground(
@@ -159,25 +164,19 @@ public partial class OverlayWindow : Window
         {
             Text = translatedText,
             Foreground = replaceForeground,
-            FontWeight = FontWeights.SemiBold,
+            FontWeight = FontWeights.Normal,
             FontSize = fontSize,
             TextWrapping = TextWrapping.Wrap,
             TextTrimming = TextTrimming.None,
-            TextAlignment = looksLikeLongContent
+            TextAlignment = prefersLeftAlignment
                 ? TextAlignment.Left
                 : TextAlignment.Center,
-            VerticalAlignment = looksLikeLongContent
+            VerticalAlignment = prefersLeftAlignment
                 ? VerticalAlignment.Top
                 : VerticalAlignment.Center,
             LineStackingStrategy =
                 LineStackingStrategy.BlockLineHeight,
-            LineHeight = fontSize * 1.17,
-            Effect = new DropShadowEffect
-            {
-                BlurRadius = 2,
-                ShadowDepth = 1,
-                Opacity = 0.78
-            }
+            LineHeight = fontSize * 1.17
         };
 
         var border = new Border
@@ -191,7 +190,7 @@ public partial class OverlayWindow : Window
                 horizontalPadding,
                 verticalPadding),
             CornerRadius =
-                new CornerRadius(2),
+                new CornerRadius(0),
             Background =
                 replaceBackground,
             Child = textBlock,
