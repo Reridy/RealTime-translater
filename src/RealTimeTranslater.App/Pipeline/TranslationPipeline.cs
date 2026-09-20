@@ -999,9 +999,39 @@ public sealed class TranslationPipeline : IDisposable
                 .Replace("\n", " ")
                 .Trim();
 
-        return message.Length <= 180
+        if (message.Contains(
+                "quality",
+                StringComparison.OrdinalIgnoreCase) ||
+            message.Contains(
+                "safe Korean translation",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return "model output failed Korean quality checks";
+        }
+
+        if (message.Contains(
+                "timed out",
+                StringComparison.OrdinalIgnoreCase) ||
+            message.Contains(
+                "exceeded",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return "translation request timed out";
+        }
+
+        if (message.Contains(
+                "500",
+                StringComparison.OrdinalIgnoreCase) ||
+            message.Contains(
+                "server error",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return "temporary Ollama server error";
+        }
+
+        return message.Length <= 120
             ? message
-            : message[..180] + "…";
+            : message[..120] + "…";
     }
 
     private static async Task DelayRemaining(
