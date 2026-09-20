@@ -18,19 +18,83 @@ public sealed class AppSettings
 
     public static AppSettings Load()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "settings.json");
-        if (!File.Exists(path))
-            return new AppSettings();
+        foreach (var path in CandidatePaths())
+        {
+            if (!File.Exists(path))
+                continue;
 
-        var json = File.ReadAllText(path);
-        return JsonSerializer.Deserialize<AppSettings>(
-                   json,
-                   new JsonSerializerOptions
-                   {
-                       PropertyNameCaseInsensitive = true
-                   })
-               ?? new AppSettings();
+            try
+            {
+                var json =
+                    File.ReadAllText(path);
+
+                var settings =
+                    JsonSerializer.Deserialize<AppSettings>(
+                        json,
+                        new JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        });
+
+                if (settings is not null)
+                    return settings;
+            }
+            catch
+            {
+                // A broken user config should not prevent launch.
+            }
+        }
+
+        return new AppSettings();
     }
+
+    public void Save()
+    {
+        try
+        {
+            var path =
+                UserSettingsPath();
+
+            Directory.CreateDirectory(
+                Path.GetDirectoryName(path)!);
+
+            var temporary =
+                path + ".tmp";
+
+            File.WriteAllText(
+                temporary,
+                JsonSerializer.Serialize(
+                    this,
+                    new JsonSerializerOptions
+                    {
+                        WriteIndented = true
+                    }));
+
+            File.Move(
+                temporary,
+                path,
+                overwrite: true);
+        }
+        catch
+        {
+            // Settings persistence is non-critical at runtime.
+        }
+    }
+
+    private static IEnumerable<string> CandidatePaths()
+    {
+        yield return UserSettingsPath();
+        yield return Path.Combine(
+            AppContext.BaseDirectory,
+            "settings.json");
+    }
+
+    private static string UserSettingsPath()
+        => Path.Combine(
+            Environment.GetFolderPath(
+                Environment.SpecialFolder.LocalApplicationData),
+            "RealTimeTranslater",
+            "settings.json");
 }
 
 public sealed class TranslationSettings
