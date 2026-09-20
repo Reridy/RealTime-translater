@@ -105,6 +105,7 @@ public sealed class TranslationSettings
     public string Provider { get; set; } = "Mock";
     public string SourceLanguage { get; set; } = "ja";
     public string TargetLanguage { get; set; } = "ko";
+    public string Mode { get; set; } = "Balanced";
     public string OllamaEndpoint { get; set; } = "http://localhost:11434";
     public string OllamaModel { get; set; } = "translategemma:4b";
     public string LibreTranslateEndpoint { get; set; } = "http://localhost:5000";
@@ -131,6 +132,7 @@ public sealed class GameProfileSettings
     public string TextSource { get; set; } = "OCR";
     public bool UnityDialogueOnly { get; set; } = true;
     public string TargetLanguage { get; set; } = "ko";
+    public string TranslationMode { get; set; } = "Balanced";
     public string Provider { get; set; } = "Ollama";
     public string OllamaModel { get; set; } = "translategemma:4b";
     public string OverlayMode { get; set; } = "Smart";
