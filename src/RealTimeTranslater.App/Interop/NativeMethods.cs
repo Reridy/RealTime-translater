@@ -17,6 +17,7 @@ internal static class NativeMethods
     internal const uint ModControl = 0x0002;
     internal const uint ModShift = 0x0004;
     internal const uint ModNoRepeat = 0x4000;
+    internal const uint VkF7 = 0x76;
     internal const uint VkF8 = 0x77;
     internal const uint VkF9 = 0x78;
     internal const uint VkF10 = 0x79;
