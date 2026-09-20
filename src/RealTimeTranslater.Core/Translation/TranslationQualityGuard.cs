@@ -111,6 +111,53 @@ public static partial class TranslationQualityGuard
         return true;
     }
 
+    public static bool IsSameLanguage(
+        string sourceLanguage,
+        string targetLanguage)
+    {
+        var source =
+            NormalizeLanguageCode(
+                sourceLanguage);
+
+        var target =
+            NormalizeLanguageCode(
+                targetLanguage);
+
+        if (source != target)
+            return false;
+
+        // A generic Chinese source is not necessarily already in the selected
+        // Simplified/Traditional variant. Force a translation/conversion when
+        // the target explicitly requests one of those variants.
+        if (source == "zh")
+        {
+            var normalizedSource =
+                NormalizeFullLanguageCode(
+                    sourceLanguage);
+            var normalizedTarget =
+                NormalizeFullLanguageCode(
+                    targetLanguage);
+
+            if (normalizedTarget is "zh-cn" or "zh-tw")
+            {
+                return string.Equals(
+                    normalizedSource,
+                    normalizedTarget,
+                    StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        return true;
+    }
+
+    public static string NormalizeFullLanguageCode(
+        string code)
+        => string.IsNullOrWhiteSpace(code)
+            ? "auto"
+            : code.Trim()
+                .Replace('_', '-')
+                .ToLowerInvariant();
+
     public static string NormalizeLanguageCode(
         string code)
     {
