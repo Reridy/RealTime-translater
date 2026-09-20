@@ -70,6 +70,34 @@ public sealed class KoreanTranslationGuardTests
     }
 
     [Fact]
+    public void NormalizeExtractsJsonTranslationWrapper()
+    {
+        var normalized =
+            KoreanTranslationGuard.Normalize(
+                "{\"translation\":\"걱정하지 마세요.\"}");
+
+        Assert.Equal(
+            "걱정하지 마세요.",
+            normalized);
+    }
+
+    [Fact]
+    public void RecoveryKeepsAllowedProperNames()
+    {
+        const string source =
+            "No matter what anyone says, you are Lucrezia.";
+
+        var recovered =
+            KoreanTranslationGuard.RecoverBestKoreanLine(
+                "설명:\n누가 뭐라고 해도 당신은 LUCREZIA예요.");
+
+        Assert.True(
+            KoreanTranslationGuard.IsAcceptable(
+                source,
+                recovered));
+    }
+
+    [Fact]
     public void NormalizeRemovesCommonWrapperNoise()
     {
         var normalized =
