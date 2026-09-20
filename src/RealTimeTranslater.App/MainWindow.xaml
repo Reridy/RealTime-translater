@@ -117,6 +117,23 @@
                         <ColumnDefinition Width="150" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Top"
+                               Margin="0,5,0,0"
+                               Text="Game glossary" />
+                    <TextBox x:Name="GlossaryTextBox"
+                             Grid.Column="1"
+                             MinHeight="58"
+                             MaxHeight="86"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto"
+                             ToolTip="Optional. One term per line, for example: Lucrezia=루크레치아" />
+                </Grid>
+                <Grid Margin="0,3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
                     <TextBlock VerticalAlignment="Center"
                                Text="Unity scope" />
                     <CheckBox x:Name="UnityDialogueOnlyCheckBox"
