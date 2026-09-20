@@ -29,18 +29,20 @@ public partial class MainWindow : Window
         new("ko", "Korean"),
         new("en", "English"),
         new("ja", "Japanese"),
-        new("zh", "Chinese"),
+        new("zh-CN", "Chinese (Simplified)"),
+        new("zh-TW", "Chinese (Traditional)"),
         new("es", "Spanish"),
         new("fr", "French"),
         new("de", "German"),
         new("pt", "Portuguese"),
-        new("it", "Italian"),
         new("ru", "Russian"),
+        new("th", "Thai"),
         new("vi", "Vietnamese"),
         new("id", "Indonesian"),
-        new("th", "Thai"),
+        new("it", "Italian"),
         new("pl", "Polish"),
         new("tr", "Turkish"),
+        new("nl", "Dutch"),
         new("ar", "Arabic")
     };
 
