@@ -9,6 +9,7 @@ public sealed class AppSettings
     public double ChangeThreshold { get; set; } = 0.025;
     public int StabilityFrames { get; set; } = 2;
     public string OcrLanguage { get; set; } = "jpn+eng";
+    public string OcrRegion { get; set; } = "Full window";
     public string TextSource { get; set; } = "OCR";
     public bool UnityDialogueOnly { get; set; } = true;
     public string OcrDataPath { get; set; } = "tessdata";
@@ -126,6 +127,7 @@ public sealed class OverlaySettings
 public sealed class GameProfileSettings
 {
     public string OcrLanguage { get; set; } = "jpn+eng";
+    public string OcrRegion { get; set; } = "Full window";
     public string TextSource { get; set; } = "OCR";
     public bool UnityDialogueOnly { get; set; } = true;
     public string TargetLanguage { get; set; } = "ko";
