@@ -10,23 +10,24 @@ namespace RealTimeTranslater.App.Translation;
 public sealed class OllamaTranslationProvider : IBatchTranslationProvider
 {
     private const int MaximumHttpAttempts = 3;
-    private static readonly TimeSpan RequestTimeout =
-        TimeSpan.FromSeconds(20);
 
     private readonly HttpClient _httpClient;
     private readonly string _endpoint;
     private readonly string _model;
+    private readonly string _mode;
     private readonly SemaphoreSlim _translationGate =
         new(1, 1);
 
     public OllamaTranslationProvider(
         HttpClient httpClient,
         string endpoint,
-        string model)
+        string model,
+        string mode = "Balanced")
     {
         _httpClient = httpClient;
         _endpoint = endpoint.TrimEnd('/');
         _model = model.Trim();
+        _mode = NormalizeMode(mode);
 
         if (_model.Length == 0)
             throw new ArgumentException(
@@ -67,7 +68,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 cancellationToken);
 
         translationBudget.CancelAfter(
-            TimeSpan.FromSeconds(25));
+            TranslationBudget);
 
         try
         {
@@ -690,11 +691,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             options = new
             {
                 temperature = 0.0,
-                num_ctx = 1024,
+                num_ctx = BatchContextBudget,
                 num_predict = Math.Clamp(
                     (int)Math.Ceiling(totalSourceLength * 1.25) + 40,
-                    80,
-                    384),
+                    72,
+                    BatchOutputBudget),
                 repeat_penalty =
                     strict ? 1.12 : 1.08
             },
@@ -785,11 +786,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             options = new
             {
                 temperature = 0.0,
-                num_ctx = 640,
+                num_ctx = RepairContextBudget,
                 num_predict =
                     TranslateGemmaOutputBudget(
                         sourceText,
-                        160),
+                        RepairOutputBudget),
                 repeat_penalty = 1.14
             },
             messages = new object[]
@@ -887,11 +888,14 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             options = new
             {
                 temperature = 0.0,
-                num_ctx = strict ? 640 : 512,
+                num_ctx =
+                    TranslateGemmaContextBudget(
+                        strict),
                 num_predict =
                     TranslateGemmaOutputBudget(
                         sourceText,
-                        strict ? 160 : 128),
+                        TranslateGemmaOutputCap(
+                            strict)),
                 repeat_penalty =
                     strict ? 1.12 : 1.08
             },
@@ -1017,11 +1021,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 {
                     temperature = 0.0,
                     top_p = 0.85,
-                    num_ctx = 1024,
+                    num_ctx = GeneralStructuredContextBudget,
                     num_predict =
                         OutputBudget(
                             sourceText,
-                            224),
+                            GeneralStructuredOutputBudget),
                     repeat_penalty = 1.10
                 },
                 messages = new object[]
@@ -1050,11 +1054,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 {
                     temperature = 0.0,
                     top_p = 0.8,
-                    num_ctx = 768,
+                    num_ctx = GeneralStrictContextBudget,
                     num_predict =
                         OutputBudget(
                             sourceText,
-                            176),
+                            GeneralStrictOutputBudget),
                     repeat_penalty = 1.14
                 },
                 messages = new object[]
@@ -1543,6 +1547,113 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             .RecoverBestKoreanLine(
                 candidate);
     }
+
+    private TimeSpan TranslationBudget
+        => _mode switch
+        {
+            "Fast" => TimeSpan.FromSeconds(16),
+            "Quality" => TimeSpan.FromSeconds(35),
+            _ => TimeSpan.FromSeconds(25)
+        };
+
+    private TimeSpan RequestTimeout
+        => _mode switch
+        {
+            "Fast" => TimeSpan.FromSeconds(14),
+            "Quality" => TimeSpan.FromSeconds(28),
+            _ => TimeSpan.FromSeconds(20)
+        };
+
+    private int BatchContextBudget
+        => _mode switch
+        {
+            "Fast" => 768,
+            "Quality" => 1536,
+            _ => 1024
+        };
+
+    private int BatchOutputBudget
+        => _mode switch
+        {
+            "Fast" => 256,
+            "Quality" => 512,
+            _ => 384
+        };
+
+    private int RepairContextBudget
+        => _mode switch
+        {
+            "Fast" => 512,
+            "Quality" => 896,
+            _ => 640
+        };
+
+    private int RepairOutputBudget
+        => _mode switch
+        {
+            "Fast" => 128,
+            "Quality" => 224,
+            _ => 160
+        };
+
+    private int TranslateGemmaContextBudget(
+        bool strict)
+        => _mode switch
+        {
+            "Fast" => strict ? 512 : 384,
+            "Quality" => strict ? 896 : 768,
+            _ => strict ? 640 : 512
+        };
+
+    private int TranslateGemmaOutputCap(
+        bool strict)
+        => _mode switch
+        {
+            "Fast" => strict ? 128 : 96,
+            "Quality" => strict ? 224 : 192,
+            _ => strict ? 160 : 128
+        };
+
+    private int GeneralStructuredContextBudget
+        => _mode switch
+        {
+            "Fast" => 768,
+            "Quality" => 1536,
+            _ => 1024
+        };
+
+    private int GeneralStructuredOutputBudget
+        => _mode switch
+        {
+            "Fast" => 160,
+            "Quality" => 320,
+            _ => 224
+        };
+
+    private int GeneralStrictContextBudget
+        => _mode switch
+        {
+            "Fast" => 512,
+            "Quality" => 1024,
+            _ => 768
+        };
+
+    private int GeneralStrictOutputBudget
+        => _mode switch
+        {
+            "Fast" => 128,
+            "Quality" => 256,
+            _ => 176
+        };
+
+    private static string NormalizeMode(
+        string? mode)
+        => mode?.Trim() switch
+        {
+            "Fast" => "Fast",
+            "Quality" => "Quality",
+            _ => "Balanced"
+        };
 
     private static int TranslateGemmaOutputBudget(
         string sourceText,
