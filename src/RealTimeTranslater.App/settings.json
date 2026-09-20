@@ -16,7 +16,7 @@
     "LibreTranslateEndpoint": "http://localhost:5000"
   },
   "Overlay": {
-    "Mode": "Replace",
+    "Mode": "Smart",
     "BackgroundOpacity": 0.78,
     "FontSizeScale": 0.82,
     "MinimumFontSize": 12.0,
