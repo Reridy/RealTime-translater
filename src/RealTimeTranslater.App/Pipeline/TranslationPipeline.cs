@@ -755,9 +755,9 @@ public sealed class TranslationPipeline : IDisposable
         IReadOnlyList<TranslatedRegion> regions,
         CaptureFrame frame)
     {
-        if (!string.Equals(
+        if (string.Equals(
                 _settings.Overlay.Mode,
-                "Replace",
+                "Subtitle",
                 StringComparison.OrdinalIgnoreCase))
         {
             return regions;
