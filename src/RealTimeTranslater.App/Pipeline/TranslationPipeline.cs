@@ -962,7 +962,7 @@ public sealed class TranslationPipeline : IDisposable
         {
             return Path.Combine(
                 root,
-                "global.json");
+                "v2-global.json");
         }
 
         var hash =
@@ -974,7 +974,7 @@ public sealed class TranslationPipeline : IDisposable
 
         return Path.Combine(
             root,
-            hash[..16] + ".json");
+            "v2-" + hash[..16] + ".json");
     }
 
     private static IReadOnlyList<string>
