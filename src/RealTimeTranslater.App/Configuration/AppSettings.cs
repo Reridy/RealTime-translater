@@ -107,6 +107,7 @@ public sealed class TranslationSettings
     public string OllamaEndpoint { get; set; } = "http://localhost:11434";
     public string OllamaModel { get; set; } = "translategemma:4b";
     public string LibreTranslateEndpoint { get; set; } = "http://localhost:5000";
+    public string GlossaryText { get; set; } = string.Empty;
 }
 
 public sealed class OverlaySettings
@@ -132,4 +133,5 @@ public sealed class GameProfileSettings
     public string OllamaModel { get; set; } = "translategemma:4b";
     public string OverlayMode { get; set; } = "Smart";
     public bool AllowScreenshots { get; set; }
+    public string GlossaryText { get; set; } = string.Empty;
 }
