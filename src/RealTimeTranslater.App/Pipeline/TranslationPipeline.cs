@@ -32,7 +32,10 @@ public sealed class TranslationPipeline : IDisposable
     private string _lastUnityTextKey = string.Empty;
     private IReadOnlyList<string> _lastVisibleSourceTexts =
         Array.Empty<string>();
+    private IReadOnlyList<TranslatedRegion> _lastVisibleTranslations =
+        Array.Empty<TranslatedRegion>();
     private int _retranslateRequested;
+    private int _refreshTranslationRequested;
     private IReadOnlyList<TranslatedRegion> _lastUnityTranslations =
         Array.Empty<TranslatedRegion>();
     private double? _lastUnityTranslationMilliseconds;
@@ -144,6 +147,23 @@ public sealed class TranslationPipeline : IDisposable
 
                     StatusChanged?.Invoke(
                         $"Retranslate requested · invalidated {removed} cached entr{(removed == 1 ? "y" : "ies")}");
+                }
+
+                if (Interlocked.Exchange(
+                        ref _refreshTranslationRequested,
+                        0) != 0)
+                {
+                    CancelUnityTranslation();
+                    ResetUnityTextState();
+                    _stabilizer.Reset();
+
+                    forcedOcrFrames =
+                        Math.Max(
+                            forcedOcrFrames,
+                            _settings.StabilityFrames);
+
+                    StatusChanged?.Invoke(
+                        "Saved correction · refreshing current text from translation memory");
                 }
 
                 using var frame = await _capture.CaptureAsync(
@@ -359,6 +379,10 @@ public sealed class TranslationPipeline : IDisposable
 
                     CancelUnityTranslation();
                     ResetUnityTextState();
+                    _lastVisibleTranslations =
+                        Array.Empty<TranslatedRegion>();
+                    _lastVisibleSourceTexts =
+                        Array.Empty<string>();
 
                     await RenderUnityAsync(
                         Array.Empty<TranslatedRegion>(),
@@ -463,6 +487,9 @@ public sealed class TranslationPipeline : IDisposable
                                     cancellationToken,
                                     _baseTranslationContext);
 
+                            _lastVisibleTranslations =
+                                translated.ToArray();
+
                             var styled =
                                 PrepareOverlayRegions(
                                     translated,
@@ -556,6 +583,37 @@ public sealed class TranslationPipeline : IDisposable
         Interlocked.Exchange(
             ref _retranslateRequested,
             1);
+    }
+
+    public IReadOnlyList<TranslatedRegion> GetCurrentTranslations()
+        => _lastVisibleTranslations
+            .ToArray();
+
+    public bool ApplyCorrection(
+        string sourceText,
+        string correctedTranslation)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText) ||
+            string.IsNullOrWhiteSpace(correctedTranslation))
+        {
+            return false;
+        }
+
+        _translator.StoreCorrection(
+            new[]
+            {
+                "auto",
+                _sourceLanguage
+            },
+            _targetLanguage,
+            sourceText,
+            correctedTranslation);
+
+        Interlocked.Exchange(
+            ref _refreshTranslationRequested,
+            1);
+
+        return true;
     }
 
     public void Dispose()
@@ -712,6 +770,9 @@ public sealed class TranslationPipeline : IDisposable
                             currentRegions[index].SourceAlignment
                     })
                 .ToArray();
+
+        _lastVisibleTranslations =
+            _lastUnityTranslations.ToArray();
 
         _lastUnityTextKey =
             currentTextKey;
