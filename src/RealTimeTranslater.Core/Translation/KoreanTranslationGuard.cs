@@ -161,24 +161,23 @@ public static partial class KoreanTranslationGuard
             return true;
         }
 
-        // Only an English source may deliberately preserve difficult English
-        // fragments in the Korean localization. This covers proper names,
-        // stylized coined terms such as NukuNuku, and stutters such as
-        // R-Really. For Japanese/Chinese/etc. we require Korean translation
-        // or Korean phonetic rendering instead of leaking the foreign script.
-        if (!string.Equals(
-                sourceLanguage,
-                "en",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
+        // Difficult English fragments may remain in English regardless of
+        // the surrounding source language, but they must actually occur in
+        // the source. This covers stylized coined terms such as NukuNuku,
+        // stutters such as R-Really, and proper names written in Latin script.
         if (!source.Contains(
                 token,
                 StringComparison.OrdinalIgnoreCase))
         {
             return false;
+        }
+
+        if (StutteredEnglishTokenRegex().IsMatch(
+                token) ||
+            CamelCaseTokenRegex().IsMatch(
+                token))
+        {
+            return true;
         }
 
         if (char.IsUpper(token[0]) &&
@@ -189,12 +188,12 @@ public static partial class KoreanTranslationGuard
             return true;
         }
 
-        if (StutteredEnglishTokenRegex().IsMatch(
-                token) ||
-            CamelCaseTokenRegex().IsMatch(
-                token))
+        if (!string.Equals(
+                sourceLanguage,
+                "en",
+                StringComparison.OrdinalIgnoreCase))
         {
-            return true;
+            return false;
         }
 
         if (token.Length >= 2 &&
