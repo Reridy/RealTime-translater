@@ -68,8 +68,16 @@ public sealed class TranslationPipeline : IDisposable
         _capture = new WindowCaptureService();
         _changeDetector = new FrameChangeDetector(settings.ChangeThreshold);
         _stabilizer = new FrameTextStabilizer(settings.StabilityFrames);
+        var cachePath =
+            Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.LocalApplicationData),
+                "RealTimeTranslater",
+                "translation-cache.json");
+
         _translator = new TranslationCoordinator(
             translationProvider,
+            new TranslationCache(cachePath),
             contextLimit: 0);
     }
 
