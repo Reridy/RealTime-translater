@@ -494,7 +494,9 @@ public partial class MainWindow : Window
                 }
             }
 
-            _overlayWindow = new OverlayWindow(_settings.Overlay);
+            _overlayWindow = new OverlayWindow(
+                _settings.Overlay,
+                targetLanguage);
             _overlayTemporarilyHidden = false;
             _overlayWindow.Show();
 
