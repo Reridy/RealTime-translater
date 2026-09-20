@@ -147,10 +147,18 @@ public partial class OverlayWindow : Window
             availableHeight,
             topAligned: looksLikeLongContent);
 
+        var replaceBackground =
+            ResolveReplaceBackground(
+                region.BackgroundArgb);
+
+        var replaceForeground =
+            ResolveReplaceForeground(
+                replaceBackground.Color);
+
         var textBlock = new TextBlock
         {
             Text = translatedText,
-            Foreground = Brushes.White,
+            Foreground = replaceForeground,
             FontWeight = FontWeights.SemiBold,
             FontSize = fontSize,
             TextWrapping = TextWrapping.Wrap,
@@ -172,14 +180,6 @@ public partial class OverlayWindow : Window
             }
         };
 
-        var alpha = (byte)Math.Clamp(
-            Math.Max(
-                _settings.BackgroundOpacity,
-                0.94) *
-            255.0,
-            0,
-            255);
-
         var border = new Border
         {
             Width = boxWidth,
@@ -193,12 +193,7 @@ public partial class OverlayWindow : Window
             CornerRadius =
                 new CornerRadius(2),
             Background =
-                new SolidColorBrush(
-                    Color.FromArgb(
-                        alpha,
-                        8,
-                        8,
-                        8)),
+                replaceBackground,
             Child = textBlock,
             IsHitTestVisible = false,
             ClipToBounds = true,
@@ -245,6 +240,49 @@ public partial class OverlayWindow : Window
             y);
         OverlayCanvas.Children.Add(
             border);
+    }
+
+    private static SolidColorBrush ResolveReplaceBackground(
+        int? backgroundArgb)
+    {
+        if (backgroundArgb is int argb)
+        {
+            var value =
+                unchecked((uint)argb);
+
+            return new SolidColorBrush(
+                Color.FromArgb(
+                    255,
+                    (byte)((value >> 16) & 0xFF),
+                    (byte)((value >> 8) & 0xFF),
+                    (byte)(value & 0xFF)));
+        }
+
+        return new SolidColorBrush(
+            Color.FromArgb(
+                255,
+                8,
+                8,
+                8));
+    }
+
+    private static Brush ResolveReplaceForeground(
+        Color background)
+    {
+        var luminance =
+            (
+                0.2126 * background.R +
+                0.7152 * background.G +
+                0.0722 * background.B
+            ) / 255.0;
+
+        return luminance >= 0.60
+            ? new SolidColorBrush(
+                Color.FromRgb(
+                    22,
+                    22,
+                    22))
+            : Brushes.White;
     }
 
     private static double FitFontSize(
