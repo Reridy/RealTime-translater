@@ -27,11 +27,13 @@ public partial class MainWindow : Window
     private Task? _runTask;
     private OverlayWindow? _overlayWindow;
     private TesseractOcrService? _ocrService;
+    private TranslationPipeline? _activePipeline;
     private string _activeProfileKey = string.Empty;
     private bool _applyingGameProfile;
     private HwndSource? _mainWindowSource;
     private bool _overlayTemporarilyHidden;
 
+    private const int RetranslateHotkeyId = 0x510;
     private const int ToggleOverlayHotkeyId = 0x511;
     private const int ToggleRunHotkeyId = 0x512;
     private const int CycleOverlayModeHotkeyId = 0x513;
@@ -145,6 +147,12 @@ public partial class MainWindow : Window
 
         _ = NativeMethods.RegisterHotKey(
             handle,
+            RetranslateHotkeyId,
+            modifiers,
+            NativeMethods.VkF7);
+
+        _ = NativeMethods.RegisterHotKey(
+            handle,
             ToggleOverlayHotkeyId,
             modifiers,
             NativeMethods.VkF8);
@@ -179,6 +187,10 @@ public partial class MainWindow : Window
 
         switch (wParam.ToInt32())
         {
+            case RetranslateHotkeyId:
+                RequestFreshRetranslate();
+                break;
+
             case ToggleOverlayHotkeyId:
                 ToggleOverlayVisibility();
                 break;
@@ -344,6 +356,9 @@ public partial class MainWindow : Window
 
         if (handle != IntPtr.Zero)
         {
+            _ = NativeMethods.UnregisterHotKey(
+                handle,
+                RetranslateHotkeyId);
             _ = NativeMethods.UnregisterHotKey(
                 handle,
                 ToggleOverlayHotkeyId);
@@ -513,6 +528,7 @@ public partial class MainWindow : Window
                 _settings.TextSource);
 
             pipeline.StatusChanged += OnPipelineStatusChanged;
+            _activePipeline = pipeline;
 
             var token = _runCancellation.Token;
             _runTask = Task.Run(async () =>
@@ -539,11 +555,23 @@ public partial class MainWindow : Window
                 finally
                 {
                     pipeline.Dispose();
+
+                    _ = Dispatcher.BeginInvoke(() =>
+                    {
+                        if (ReferenceEquals(
+                                _activePipeline,
+                                pipeline))
+                        {
+                            _activePipeline = null;
+                            RetranslateButton.IsEnabled = false;
+                        }
+                    });
                 }
             }, token);
 
             StartButton.IsEnabled = false;
             StopButton.IsEnabled = true;
+            RetranslateButton.IsEnabled = true;
             StatusTextBlock.Text = "Starting...";
         }
         catch (Exception ex)
@@ -568,6 +596,26 @@ public partial class MainWindow : Window
 
     private async void StopButton_Click(object sender, RoutedEventArgs e)
         => await StopInternalAsync();
+
+    private void RetranslateButton_Click(
+        object sender,
+        RoutedEventArgs e)
+        => RequestFreshRetranslate();
+
+    private void RequestFreshRetranslate()
+    {
+        if (_activePipeline is null)
+        {
+            StatusTextBlock.Text =
+                "Fresh retranslate is available while translation is running.";
+            return;
+        }
+
+        _activePipeline.RequestRetranslateCurrent();
+
+        StatusTextBlock.Text =
+            "Fresh retranslate requested · current cached result will be ignored";
+    }
 
     private void AllowScreenshotsCheckBox_Changed(
         object sender,
@@ -908,8 +956,10 @@ public partial class MainWindow : Window
             _ocrService = null;
         }
 
+        _activePipeline = null;
         StartButton.IsEnabled = true;
         StopButton.IsEnabled = false;
+        RetranslateButton.IsEnabled = false;
         StatusTextBlock.Text = "Stopped";
     }
 
