@@ -142,9 +142,35 @@ public static partial class KoreanTranslationGuard
         }
 
         if (char.IsUpper(token[0]) &&
-            source.Contains(token, StringComparison.OrdinalIgnoreCase))
+            source.Contains(token, StringComparison.Ordinal))
         {
             return true;
+        }
+
+        if (token.Length >= 2 &&
+            token.All(ch =>
+                !char.IsLetter(ch) ||
+                char.IsUpper(ch)))
+        {
+            var matchingSourceToken =
+                LatinWordRegex()
+                    .Matches(source)
+                    .Cast<Match>()
+                    .Select(match =>
+                        match.Value)
+                    .FirstOrDefault(sourceToken =>
+                        string.Equals(
+                            sourceToken,
+                            token,
+                            StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrEmpty(
+                    matchingSourceToken) &&
+                char.IsUpper(
+                    matchingSourceToken[0]))
+            {
+                return true;
+            }
         }
 
         return false;
