@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using RealTimeTranslater.App.Capture;
 using RealTimeTranslater.App.Configuration;
 using RealTimeTranslater.App.Ocr;
@@ -80,16 +82,13 @@ public sealed class TranslationPipeline : IDisposable
         _changeDetector = new FrameChangeDetector(settings.ChangeThreshold);
         _stabilizer = new FrameTextStabilizer(settings.StabilityFrames);
         var cachePath =
-            Path.Combine(
-                Environment.GetFolderPath(
-                    Environment.SpecialFolder.LocalApplicationData),
-                "RealTimeTranslater",
-                "translation-cache.json");
+            BuildGameCachePath(
+                settings.LastTargetProfileKey);
 
         _translator = new TranslationCoordinator(
             translationProvider,
             new TranslationCache(cachePath),
-            contextLimit: 0);
+            contextLimit: 4);
     }
 
     public event Action<string>? StatusChanged;
@@ -943,6 +942,38 @@ public sealed class TranslationPipeline : IDisposable
             "\u001e",
             selected.Select(region =>
                 region.Text.Trim()));
+    }
+
+    private static string BuildGameCachePath(
+        string? profileKey)
+    {
+        var root =
+            Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.LocalApplicationData),
+                "RealTimeTranslater",
+                "translation-cache");
+
+        Directory.CreateDirectory(root);
+
+        if (string.IsNullOrWhiteSpace(
+                profileKey))
+        {
+            return Path.Combine(
+                root,
+                "global.json");
+        }
+
+        var hash =
+            Convert.ToHexString(
+                SHA256.HashData(
+                    Encoding.UTF8.GetBytes(
+                        profileKey)))
+                .ToLowerInvariant();
+
+        return Path.Combine(
+            root,
+            hash[..16] + ".json");
     }
 
     private static IReadOnlyList<string>
