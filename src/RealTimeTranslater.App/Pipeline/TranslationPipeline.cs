@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -447,7 +448,7 @@ public sealed class TranslationPipeline : IDisposable
                         forcedOcrFrames--;
 
                     var regions =
-                        _ocr.Recognize(
+                        RecognizeOcrRegions(
                             frame.Bitmap);
 
                     if (adapterSemanticOcrFallback &&
@@ -1051,6 +1052,111 @@ public sealed class TranslationPipeline : IDisposable
         }
 
         return entries;
+    }
+
+    private IReadOnlyList<TextRegion> RecognizeOcrRegions(
+        Bitmap bitmap)
+    {
+        var rectangle =
+            GetOcrRegion(
+                bitmap.Width,
+                bitmap.Height,
+                _settings.OcrRegion);
+
+        if (rectangle.X == 0 &&
+            rectangle.Y == 0 &&
+            rectangle.Width == bitmap.Width &&
+            rectangle.Height == bitmap.Height)
+        {
+            return _ocr.Recognize(
+                bitmap);
+        }
+
+        using var cropped =
+            bitmap.Clone(
+                rectangle,
+                bitmap.PixelFormat);
+
+        return _ocr
+            .Recognize(cropped)
+            .Select(region =>
+                region with
+                {
+                    Bounds =
+                        new PixelRect(
+                            region.Bounds.X +
+                                rectangle.X,
+                            region.Bounds.Y +
+                                rectangle.Y,
+                            region.Bounds.Width,
+                            region.Bounds.Height)
+                })
+            .ToArray();
+    }
+
+    private static Rectangle GetOcrRegion(
+        int width,
+        int height,
+        string? mode)
+    {
+        if (width < 1 ||
+            height < 1)
+        {
+            return new Rectangle(
+                0,
+                0,
+                Math.Max(1, width),
+                Math.Max(1, height));
+        }
+
+        return mode switch
+        {
+            "Bottom 45%" =>
+                new Rectangle(
+                    0,
+                    (int)Math.Round(
+                        height * 0.55),
+                    width,
+                    Math.Max(
+                        1,
+                        height -
+                        (int)Math.Round(
+                            height * 0.55))),
+
+            "Bottom 30%" =>
+                new Rectangle(
+                    0,
+                    (int)Math.Round(
+                        height * 0.70),
+                    width,
+                    Math.Max(
+                        1,
+                        height -
+                        (int)Math.Round(
+                            height * 0.70))),
+
+            "Center 70%" =>
+                new Rectangle(
+                    (int)Math.Round(
+                        width * 0.15),
+                    (int)Math.Round(
+                        height * 0.15),
+                    Math.Max(
+                        1,
+                        (int)Math.Round(
+                            width * 0.70)),
+                    Math.Max(
+                        1,
+                        (int)Math.Round(
+                            height * 0.70))),
+
+            _ =>
+                new Rectangle(
+                    0,
+                    0,
+                    width,
+                    height)
+        };
     }
 
     private static IReadOnlyList<TextRegion>
