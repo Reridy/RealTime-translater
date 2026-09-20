@@ -34,7 +34,8 @@ Priority:
 5. Better line grouping and speaker-name detection.
 6. ✅ Translation batching for multiple visible text regions.
 7. OCR confidence/debug overlay.
-8. ✅ Global hotkeys for start/stop, hide/show overlay, and cycling overlay mode. Freeze/retranslate remain future additions.
+8. ✅ Global hotkeys for fresh retranslate, start/stop, hide/show overlay, and cycling overlay mode.
+9. ✅ Per-game OCR region presets for full-window, bottom-dialogue, and center-focused capture.
 
 This phase should make the tool genuinely comfortable for visual novels before broadening to every game genre.
 
@@ -93,13 +94,13 @@ Hybrid mode:
 - ✅ persistent per-game glossary
 - ✅ persistent translation cache / lightweight translation memory
 - ✅ current-speaker context for local LLM prompts
-- scene and dialogue context memory
-- local LLM provider presets
+- ✅ short scene/dialogue continuity memory
+- ✅ local LLM speed/quality presets (Fast / Balanced / Quality)
 - OpenAI-compatible provider
 - DeepL, Azure, and Google provider plugins
 - ✅ batch translation
 - ✅ automatic source-language detection for adapter text
-- optional user correction that feeds translation memory
+- ✅ user correction editor that feeds per-game translation memory
 
 ## Phase 5 - Performance
 
