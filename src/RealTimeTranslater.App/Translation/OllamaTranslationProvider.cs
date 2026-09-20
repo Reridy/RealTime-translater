@@ -88,6 +88,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 request.Text,
                 sourceLanguage,
                 request.TargetLanguage,
+                request.Context,
                 translationBudget.Token);
         }
 
@@ -189,6 +190,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                         item.Request.Text,
                         item.SourceLanguage,
                         item.Request.TargetLanguage,
+                        item.Request.Context,
                         translationBudget.Token);
 
                 return results;
@@ -210,6 +212,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                                     item.SourceLanguage))
                                 .ToArray(),
                             requests[0].TargetLanguage,
+                            pending[0].Request.Context,
                             strict: attempt > 0,
                             translationBudget.Token);
 
@@ -317,6 +320,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         string sourceText,
         string sourceLanguage,
         string targetLanguage,
+        IReadOnlyList<string> context,
         CancellationToken cancellationToken)
     {
         Exception? lastError = null;
@@ -330,6 +334,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                         sourceText,
                         sourceLanguage,
                         targetLanguage,
+                        context,
                         strict: attempt > 0,
                         cancellationToken);
 
@@ -394,6 +399,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     sourceText,
                     sourceLanguage,
                     targetLanguage,
+                    context,
                     cancellationToken);
 
             repaired =
@@ -455,6 +461,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         var speakerContext =
             BuildSpeakerContext(request.Context);
 
+        var glossaryContext =
+            BuildGlossaryContext(
+                request.Context,
+                request.Text);
+
         Exception? primaryError = null;
 
         try
@@ -465,6 +476,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     sourceLanguage,
                     request.TargetLanguage,
                     speakerContext,
+                    glossaryContext,
                     structuredOutput: true,
                     strict: false,
                     cancellationToken);
@@ -509,6 +521,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     sourceLanguage,
                     request.TargetLanguage,
                     speakerContext: string.Empty,
+                    glossaryContext,
                     structuredOutput: false,
                     strict: true,
                     cancellationToken);
@@ -569,6 +582,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
     private async Task<IReadOnlyList<string>> RequestTranslateGemmaBatchAsync(
         IReadOnlyList<(string Text, string SourceLanguage)> items,
         string targetLanguage,
+        IReadOnlyList<string> context,
         bool strict,
         CancellationToken cancellationToken)
     {
@@ -577,6 +591,23 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
 
         var prompt =
             new StringBuilder();
+
+        var glossaryContext =
+            BuildGlossaryContext(
+                context,
+                string.Join(
+                    "\n",
+                    items.Select(item =>
+                        item.Text)));
+
+        if (!string.IsNullOrWhiteSpace(
+                glossaryContext))
+        {
+            prompt.AppendLine(
+                "Mandatory game glossary. When a source term appears, use the specified target term exactly:");
+            prompt.AppendLine(
+                glossaryContext);
+        }
 
         prompt.Append(
             strict
@@ -679,12 +710,18 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         string sourceText,
         string sourceLanguage,
         string targetLanguage,
+        IReadOnlyList<string> context,
         CancellationToken cancellationToken)
     {
         var sourceName =
             LanguageName(sourceLanguage);
         var targetName =
             LanguageName(targetLanguage);
+
+        var glossaryContext =
+            BuildGlossaryContext(
+                context,
+                sourceText);
 
         var payload = new
         {
@@ -726,7 +763,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                         PreservationInstruction(
                             sourceLanguage,
                             targetLanguage) +
-                        $" Do not explain, repeat the source, or continue the dialogue.\n\n" +
+                        $" Do not explain, repeat the source, or continue the dialogue. " +
+                        (string.IsNullOrWhiteSpace(glossaryContext)
+                            ? string.Empty
+                            : $"Mandatory glossary: {glossaryContext}. ") +
+                        "\n\n" +
                         sourceText
                 }
             }
@@ -741,6 +782,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         string sourceText,
         string sourceLanguage,
         string targetLanguage,
+        IReadOnlyList<string> context,
         bool strict,
         CancellationToken cancellationToken)
     {
@@ -754,10 +796,21 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 sourceLanguage,
                 targetLanguage);
 
+        var glossaryContext =
+            BuildGlossaryContext(
+                context,
+                sourceText);
+
+        var glossaryInstruction =
+            string.IsNullOrWhiteSpace(
+                glossaryContext)
+                ? string.Empty
+                : $" Mandatory glossary: {glossaryContext}. Use those target terms exactly.";
+
         var prompt = strict
-            ? $"Translate this {sourceName} text to {targetName}. Output only the complete {targetName} translation. {preservation} Do not explain, repeat, continue, or omit.\n\n" +
+            ? $"Translate this {sourceName} text to {targetName}. Output only the complete {targetName} translation. {preservation}{glossaryInstruction} Do not explain, repeat, continue, or omit.\n\n" +
               sourceText
-            : $"Translate {sourceName} to natural {targetName}. Preserve meaning, tone, hesitation, negation, and names. {preservation} Output only the translation.\n\n" +
+            : $"Translate {sourceName} to natural {targetName}. Preserve meaning, tone, hesitation, negation, and names. {preservation}{glossaryInstruction} Output only the translation.\n\n" +
               sourceText;
 
         var payload = new
@@ -796,6 +849,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         string sourceLanguage,
         string targetLanguage,
         string speakerContext,
+        string glossaryContext,
         bool structuredOutput,
         bool strict,
         CancellationToken cancellationToken)
@@ -814,6 +868,15 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 sourceLanguage,
                 targetLanguage) +
             " Short game abbreviations already present in SOURCE may remain.";
+
+        if (!string.IsNullOrWhiteSpace(
+                glossaryContext))
+        {
+            systemPrompt +=
+                " Mandatory game glossary: " +
+                glossaryContext +
+                ". When a source term appears, use its specified target term exactly.";
+        }
 
         if (structuredOutput)
         {
@@ -1132,6 +1195,63 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             : body.Length <= 240
                 ? body
                 : body[..240];
+    }
+
+    private static string BuildGlossaryContext(
+        IReadOnlyList<string> context,
+        string sourceText)
+    {
+        var entries =
+            context
+                .Select(line =>
+                    line.Trim())
+                .Where(line =>
+                    line.StartsWith(
+                        "Glossary:",
+                        StringComparison.OrdinalIgnoreCase))
+                .Select(line =>
+                    line[
+                        "Glossary:".Length..]
+                        .Trim())
+                .Select(line =>
+                {
+                    var separator =
+                        line.IndexOf(
+                            "=>",
+                            StringComparison.Ordinal);
+
+                    if (separator <= 0 ||
+                        separator >=
+                            line.Length - 2)
+                    {
+                        return (
+                            Source: string.Empty,
+                            Target: string.Empty);
+                    }
+
+                    return (
+                        Source:
+                            line[..separator]
+                                .Trim(),
+                        Target:
+                            line[
+                                (separator + 2)..]
+                                .Trim());
+                })
+                .Where(entry =>
+                    entry.Source.Length > 0 &&
+                    entry.Target.Length > 0 &&
+                    sourceText.Contains(
+                        entry.Source,
+                        StringComparison.OrdinalIgnoreCase))
+                .Take(12)
+                .Select(entry =>
+                    $"{entry.Source} => {entry.Target}")
+                .ToArray();
+
+        return string.Join(
+            "; ",
+            entries);
     }
 
     private static string BuildSpeakerContext(
