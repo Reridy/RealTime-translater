@@ -102,7 +102,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             when (!cancellationToken.IsCancellationRequested)
         {
             throw new TimeoutException(
-                "Translation exceeded the 25 second realtime budget.");
+                $"Translation exceeded the {TranslationBudget.TotalSeconds:0} second realtime budget.");
         }
         }
         finally
@@ -145,7 +145,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     cancellationToken);
 
             translationBudget.CancelAfter(
-                TimeSpan.FromSeconds(25));
+                TranslationBudget);
 
             var results =
                 new string[requests.Count];
@@ -235,7 +235,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                                 pending[i].Request.Text,
                                 normalized,
                                 pending[i].SourceLanguage,
-                                pending[i].Request.TargetLanguage))
+                                pending[i].Request.TargetLanguage) ||
+                            TranslationContextGuard.ContainsContextLeak(
+                                normalized,
+                                pending[i].Request.Context,
+                                pending[i].Request.Text))
                         {
                             allValid = false;
                             break;
@@ -310,7 +314,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             when (!cancellationToken.IsCancellationRequested)
         {
             throw new TimeoutException(
-                "Batch translation exceeded the 25 second realtime budget.");
+                $"Batch translation exceeded the {TranslationBudget.TotalSeconds:0} second realtime budget.");
         }
         finally
         {
@@ -348,7 +352,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                         sourceText,
                         translated,
                         sourceLanguage,
-                        targetLanguage))
+                        targetLanguage) &&
+                    !TranslationContextGuard.ContainsContextLeak(
+                        translated,
+                        context,
+                        sourceText))
                 {
                     return translated;
                 }
@@ -364,7 +372,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                         sourceText,
                         recovered,
                         sourceLanguage,
-                        targetLanguage))
+                        targetLanguage) &&
+                    !TranslationContextGuard.ContainsContextLeak(
+                        recovered,
+                        context,
+                        sourceText))
                 {
                     return recovered;
                 }
@@ -412,7 +424,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     sourceText,
                     repaired,
                     sourceLanguage,
-                    targetLanguage))
+                    targetLanguage) &&
+                !TranslationContextGuard.ContainsContextLeak(
+                    repaired,
+                    context,
+                    sourceText))
             {
                 return repaired;
             }
@@ -428,7 +444,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     sourceText,
                     recovered,
                     sourceLanguage,
-                    targetLanguage))
+                    targetLanguage) &&
+                !TranslationContextGuard.ContainsContextLeak(
+                    recovered,
+                    context,
+                    sourceText))
             {
                 return recovered;
             }
@@ -497,7 +517,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     request.Text,
                     primary,
                     sourceLanguage,
-                    request.TargetLanguage))
+                    request.TargetLanguage) &&
+                !TranslationContextGuard.ContainsContextLeak(
+                    primary,
+                    request.Context,
+                    request.Text))
             {
                 return primary;
             }
@@ -543,7 +567,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     request.Text,
                     strict,
                     sourceLanguage,
-                    request.TargetLanguage))
+                    request.TargetLanguage) &&
+                !TranslationContextGuard.ContainsContextLeak(
+                    strict,
+                    request.Context,
+                    request.Text))
             {
                 return strict;
             }
@@ -558,7 +586,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     request.Text,
                     recovered,
                     sourceLanguage,
-                    request.TargetLanguage))
+                    request.TargetLanguage) &&
+                !TranslationContextGuard.ContainsContextLeak(
+                    recovered,
+                    request.Context,
+                    request.Text))
             {
                 return recovered;
             }
@@ -642,9 +674,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 recentDialogueContext))
         {
             prompt.AppendLine(
-                "Recent dialogue context for continuity only. Translate only the numbered current items:");
+                "CONTEXT ONLY — never quote, translate, summarize, or copy any of these lines into the result. Use them only to understand tone and continuity:");
             prompt.AppendLine(
                 recentDialogueContext);
+            prompt.AppendLine(
+                "END CONTEXT ONLY");
         }
 
         prompt.Append(
@@ -872,7 +906,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             string.IsNullOrWhiteSpace(
                 recentDialogueContext)
                 ? string.Empty
-                : $" Recent dialogue context for continuity only: {recentDialogueContext}";
+                : $" CONTEXT ONLY (never copy or translate this into the answer): {recentDialogueContext} END CONTEXT ONLY.";
 
         var prompt = strict
             ? $"Translate this {sourceName} text to {targetName}. Output only the complete {targetName} translation. {preservation}{glossaryInstruction}{speakerInstruction} Do not explain, repeat, continue, or omit.\n\n" +
@@ -984,9 +1018,9 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 recentDialogueContext))
         {
             userText +=
-                "Recent dialogue context for continuity only; do not translate or continue it:\n" +
+                "CONTEXT ONLY — never quote, translate, summarize, or copy this into the answer:\n" +
                 recentDialogueContext +
-                "\n";
+                "\nEND CONTEXT ONLY\n";
         }
 
         userText +=
@@ -1335,48 +1369,29 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             entries);
     }
 
-    private static string BuildRecentDialogueContext(
+    private string BuildRecentDialogueContext(
         IReadOnlyList<string> context,
         string currentSource)
     {
-        var currentNormalized =
-            string.Join(
-                " ",
-                currentSource.Split(
-                    (char[]?)null,
-                    StringSplitOptions.RemoveEmptyEntries));
+        if (string.Equals(
+                _mode,
+                "Fast",
+                StringComparison.Ordinal))
+        {
+            return string.Empty;
+        }
 
-        var lines =
-            context
-                .Select(line =>
-                    line.Trim())
-                .Where(line =>
-                    line.Length > 0 &&
-                    !line.StartsWith(
-                        "Glossary:",
-                        StringComparison.OrdinalIgnoreCase) &&
-                    !line.StartsWith(
-                        "Current speaker:",
-                        StringComparison.OrdinalIgnoreCase) &&
-                    line.Contains(
-                        "=>",
-                        StringComparison.Ordinal))
-                .Where(line =>
-                    !line.StartsWith(
-                        currentNormalized + " =>",
-                        StringComparison.Ordinal))
-                .Reverse()
-                .Take(3)
-                .Reverse()
-                .Select(line =>
-                    line.Length <= 180
-                        ? line
-                        : line[..180] + "…")
-                .ToArray();
-
-        return string.Join(
-            " | ",
-            lines);
+        return TranslationContextGuard
+            .BuildRecentTargetContext(
+                context,
+                currentSource,
+                maxLines:
+                    string.Equals(
+                        _mode,
+                        "Quality",
+                        StringComparison.Ordinal)
+                        ? 3
+                        : 2);
     }
 
     private static string BuildSpeakerContext(
