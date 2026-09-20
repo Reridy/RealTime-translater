@@ -14,10 +14,15 @@ Implemented on the feature/mvp-realtime-translation branch:
 - OCR text lines with Tesseract 5.
 - Optional read-only Unity/BepInEx text adapter that can feed exact visible TMP_Text / Unity UI strings to the translation pipeline, with automatic OCR fallback.
 - Stabilize OCR over multiple frames before translating.
-- Cache translations to avoid repeat network/model calls, including a persistent per-user cache across restarts.
+- Cache translations to avoid repeat network/model calls, with persistent per-game translation memory across restarts.
 - Automatically remember OCR, provider, model, target language, overlay mode, and glossary settings per game process.
 - Translate through Ollama, LibreTranslate, or a built-in mock provider.
 - Choose the target translation language from the desktop UI. The current presets include Korean, English, Japanese, Simplified/Traditional Chinese, Spanish, French, German, Portuguese, Russian, Thai, Vietnamese, Indonesian, Italian, Polish, Turkish, Dutch, and Arabic.
+- Choose Fast, Balanced, or Quality translation mode per game.
+- Correct the currently visible translation and save the correction into persistent per-game translation memory.
+- Force a fresh retranslation of the current text with Ctrl+Shift+F7 or the Fresh Retranslate button.
+- Limit OCR to Full window, Bottom 45%, Bottom 30%, or Center 70% presets to reduce noise and latency for non-Unity games.
+- Use a short recent-dialogue context window for better pronoun, tone, and continuity handling without feeding long conversation history to the model.
 - Editable per-game glossary (`source=preferred target`) for stable character names, places, skills, and UI terminology.
 - Speaker-aware TranslateGemma prompts without sending a long dialogue-history prompt.
 - Global runtime hotkeys: Ctrl+Shift+F8 toggles the overlay, Ctrl+Shift+F9 starts/stops translation, and Ctrl+Shift+F10 cycles Smart/Replace/Subtitle.
@@ -50,7 +55,7 @@ Requirements:
 
     dotnet run --project src/RealTimeTranslater.App
 
-4. Pick the game window, choose an OCR language, target language, and translation provider, then press Start. The app remembers these choices automatically for that game process on later launches.
+4. Pick the game window, choose an OCR language/area, target language, translation mode, and provider, then press Start. The app remembers these choices automatically for that game process on later launches.
 
 For real translation without a cloud API key, run a local Ollama server and select Ollama in the app. The model name and endpoint are editable in the UI.
 
