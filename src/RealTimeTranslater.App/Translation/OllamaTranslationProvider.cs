@@ -232,7 +232,8 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
 
                         if (!KoreanTranslationGuard.IsAcceptable(
                                 pending[i].Request.Text,
-                                normalized))
+                                normalized,
+                                pending[i].SourceLanguage))
                         {
                             allValid = false;
                             break;
@@ -340,7 +341,8 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
 
                 if (KoreanTranslationGuard.IsAcceptable(
                         sourceText,
-                        translated))
+                        translated,
+                        sourceLanguage))
                 {
                     return translated;
                 }
@@ -354,7 +356,8 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                         recovered) &&
                     KoreanTranslationGuard.IsAcceptable(
                         sourceText,
-                        recovered))
+                        recovered,
+                        sourceLanguage))
                 {
                     return recovered;
                 }
@@ -399,7 +402,8 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
 
             if (KoreanTranslationGuard.IsAcceptable(
                     sourceText,
-                    repaired))
+                    repaired,
+                    sourceLanguage))
             {
                 return repaired;
             }
@@ -413,7 +417,8 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     recovered) &&
                 KoreanTranslationGuard.IsAcceptable(
                     sourceText,
-                    recovered))
+                    recovered,
+                    sourceLanguage))
             {
                 return recovered;
             }
@@ -468,7 +473,8 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
 
             if (KoreanTranslationGuard.IsAcceptable(
                     request.Text,
-                    primary))
+                    primary,
+                    sourceLanguage))
             {
                 return primary;
             }
@@ -510,7 +516,8 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
 
             if (KoreanTranslationGuard.IsAcceptable(
                     request.Text,
-                    strict))
+                    strict,
+                    sourceLanguage))
             {
                 return strict;
             }
@@ -523,7 +530,8 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             if (!string.IsNullOrWhiteSpace(recovered) &&
                 KoreanTranslationGuard.IsAcceptable(
                     request.Text,
-                    recovered))
+                    recovered,
+                    sourceLanguage))
             {
                 return recovered;
             }
@@ -567,8 +575,8 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
 
         prompt.Append(
             strict
-                ? $"Translate every numbered item to {targetName}. Return only the JSON result. Do not omit, merge, explain, or continue any item.\n"
-                : $"Translate every numbered item to natural {targetName}. Preserve each item's meaning, tone, hesitation, and speaker wording. Return only the JSON result in the same order.\n");
+                ? $"Translate every numbered item to {targetName}. Return only the JSON result. Do not omit, merge, explain, or continue any item. For English-source items only, difficult stylized fragments such as R-Really or coined terms such as NukuNuku may remain exactly as written when translating them would distort the character's wording. Ordinary English must still be translated. For Japanese, Chinese, or other non-user-language source items, do not leave source-script words untranslated; translate them or render them phonetically in Korean.\n"
+                : $"Translate every numbered item to natural {targetName}. Preserve each item's meaning, tone, hesitation, and speaker wording. For English-source items only, difficult stylized fragments such as R-Really or coined terms such as NukuNuku may remain exactly as written when translating them would distort the character's wording. Ordinary English must still be translated. For Japanese, Chinese, or other non-user-language source items, do not leave source-script words untranslated; translate them or render them phonetically in Korean. Return only the JSON result in the same order.\n");
 
         for (var i = 0; i < items.Count; i++)
         {
@@ -710,7 +718,8 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                         $"Translate this {sourceName} text to natural {targetName}. " +
                         $"Return exactly one JSON object with the field translation. " +
                         $"The value must contain only the complete {targetName} translation. " +
-                        $"Do not explain, repeat the source, continue the dialogue, or mix another language.\n\n" +
+                        PreservationInstruction(sourceLanguage) +
+                        $" Do not explain, repeat the source, or continue the dialogue.\n\n" +
                         sourceText
                 }
             }
@@ -733,10 +742,14 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         var targetName =
             LanguageName(targetLanguage);
 
+        var preservation =
+            PreservationInstruction(
+                sourceLanguage);
+
         var prompt = strict
-            ? $"Translate this {sourceName} text to {targetName}. Output only the complete {targetName} translation. Do not explain, repeat, continue, omit, or mix another language.\n\n" +
+            ? $"Translate this {sourceName} text to {targetName}. Output only the complete {targetName} translation. {preservation} Do not explain, repeat, continue, or omit.\n\n" +
               sourceText
-            : $"Translate {sourceName} to natural {targetName}. Preserve meaning, tone, hesitation, negation, and names. Output only the translation.\n\n" +
+            : $"Translate {sourceName} to natural {targetName}. Preserve meaning, tone, hesitation, negation, and names. {preservation} Output only the translation.\n\n" +
               sourceText;
 
         var payload = new
@@ -785,10 +798,8 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             "Preserve meaning exactly: negation, subject/object relations, " +
             "chronology, emotion, hesitation, emphasis, jokes, and tone. " +
             "Never invent, omit, continue, explain, or answer the dialogue. " +
-            "For stutters, preserve hesitation: for example 'N-no' means " +
-            "'아-아니요', not an apology. " +
-            "Output Korean only except unavoidable proper names or short " +
-            "game abbreviations already present in SOURCE.";
+            PreservationInstruction(sourceLanguage) +
+            " Short game abbreviations already present in SOURCE may remain.";
 
         if (structuredOutput)
         {
@@ -1135,9 +1146,24 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         }
 
         if (text.Any(ch =>
-                ch is >= '\u3040' and <= '\u30FF'))
+                ch is >= '\u3040' and <= '\u30FF' ||
+                ch is >= '\u31F0' and <= '\u31FF'))
         {
             return "ja";
+        }
+
+        if (text.Any(ch =>
+                ch is >= '\uAC00' and <= '\uD7A3' ||
+                ch is >= '\u3131' and <= '\u318E'))
+        {
+            return "ko";
+        }
+
+        if (text.Any(ch =>
+                ch is >= '\u3400' and <= '\u4DBF' ||
+                ch is >= '\u4E00' and <= '\u9FFF'))
+        {
+            return "zh";
         }
 
         if (text.Any(ch =>
@@ -1173,8 +1199,21 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         {
             "en" => "English",
             "ja" => "Japanese",
+            "zh" => "Chinese",
             "ko" => "Korean",
             _ => "source language"
+        };
+
+    private static string PreservationInstruction(
+        string sourceLanguage)
+        => sourceLanguage.ToLowerInvariant() switch
+        {
+            "en" =>
+                "If an English fragment is intentionally awkward to localize, such as a stutter like R-Really or a stylized coined term like NukuNuku, you may preserve that exact fragment in English when translating it would distort the wording. Do not leave ordinary English words untranslated.",
+            "ko" =>
+                "Keep Korean wording as Korean; preserve unusual Korean names or coined terms as written when appropriate.",
+            _ =>
+                "Do not leave Japanese, Chinese, or other foreign-language source words or script untranslated. Translate their meaning into Korean, or use a Korean phonetic rendering for names and coined terms."
         };
 
     private static int TranslateGemmaOutputBudget(
