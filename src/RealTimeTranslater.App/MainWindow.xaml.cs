@@ -75,6 +75,9 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        CaptureCurrentSettings();
+        _settings.Save();
+
         _runCancellation?.Cancel();
         _overlayWindow?.Close();
         _ocrService?.Dispose();
@@ -128,6 +131,18 @@ public partial class MainWindow : Window
                 ?? "Replace";
             _settings.Overlay.AllowScreenshots =
                 AllowScreenshotsCheckBox.IsChecked == true;
+            _settings.Translation.Provider =
+                providerName;
+            _settings.Translation.OllamaEndpoint =
+                EndpointTextBox.Text.Trim().Length == 0
+                    ? _settings.Translation.OllamaEndpoint
+                    : EndpointTextBox.Text.Trim();
+            _settings.Translation.OllamaModel =
+                ModelTextBox.Text.Trim().Length == 0
+                    ? _settings.Translation.OllamaModel
+                    : ModelTextBox.Text.Trim();
+
+            _settings.Save();
 
             _ocrService = new TesseractOcrService(
                 _settings.OcrDataPath,
@@ -268,6 +283,46 @@ public partial class MainWindow : Window
     {
         if (IsLoaded)
             SetEndpointForSelectedProvider();
+    }
+
+    private void CaptureCurrentSettings()
+    {
+        if (_settings is null)
+            return;
+
+        _settings.OcrLanguage =
+            OcrLanguageComboBox.SelectedItem?.ToString()
+            ?? _settings.OcrLanguage;
+
+        _settings.TextSource =
+            TextSourceComboBox.SelectedItem?.ToString()
+            ?? _settings.TextSource;
+
+        _settings.UnityDialogueOnly =
+            UnityDialogueOnlyCheckBox.IsChecked == true;
+
+        _settings.Overlay.Mode =
+            OverlayModeComboBox.SelectedItem?.ToString()
+            ?? _settings.Overlay.Mode;
+
+        _settings.Overlay.AllowScreenshots =
+            AllowScreenshotsCheckBox.IsChecked == true;
+
+        _settings.Translation.Provider =
+            ProviderComboBox.SelectedItem?.ToString()
+            ?? _settings.Translation.Provider;
+
+        var endpoint =
+            EndpointTextBox.Text.Trim();
+
+        if (endpoint.Length > 0)
+            _settings.Translation.OllamaEndpoint = endpoint;
+
+        var model =
+            ModelTextBox.Text.Trim();
+
+        if (model.Length > 0)
+            _settings.Translation.OllamaModel = model;
     }
 
     private ITranslationProvider CreateTranslationProvider(string providerName)
