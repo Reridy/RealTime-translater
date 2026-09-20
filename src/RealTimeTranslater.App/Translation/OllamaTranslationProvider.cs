@@ -44,7 +44,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             model = _model,
             prompt = string.Empty,
             stream = false,
-            keep_alive = "30m"
+            keep_alive = "2h"
         };
 
         _ = await PostJsonWithRetriesAsync(
@@ -494,7 +494,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         {
             model = _model,
             stream = false,
-            keep_alive = "30m",
+            keep_alive = "2h",
             format = new
             {
                 type = "object",
@@ -592,15 +592,15 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         {
             model = _model,
             stream = false,
-            keep_alive = "30m",
+            keep_alive = "2h",
             options = new
             {
                 temperature = 0.0,
-                num_ctx = strict ? 768 : 1024,
+                num_ctx = strict ? 640 : 512,
                 num_predict =
-                    OutputBudget(
+                    TranslateGemmaOutputBudget(
                         sourceText,
-                        strict ? 192 : 256),
+                        strict ? 160 : 128),
                 repeat_penalty =
                     strict ? 1.12 : 1.08
             },
@@ -682,7 +682,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             {
                 model = _model,
                 stream = false,
-                keep_alive = "30m",
+                keep_alive = "2h",
                 format = new
                 {
                     type = "object",
@@ -729,7 +729,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             {
                 model = _model,
                 stream = false,
-                keep_alive = "30m",
+                keep_alive = "2h",
                 options = new
                 {
                     temperature = 0.0,
@@ -1025,6 +1025,16 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             "ko" => "Korean",
             _ => "source language"
         };
+
+    private static int TranslateGemmaOutputBudget(
+        string sourceText,
+        int maximum)
+        => Math.Clamp(
+            (int)Math.Ceiling(
+                sourceText.Length * 0.95) +
+            20,
+            36,
+            maximum);
 
     private static int OutputBudget(
         string sourceText,
