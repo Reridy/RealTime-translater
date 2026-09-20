@@ -3,9 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="RealTime Translater"
         Width="760"
-        Height="520"
+        Height="640"
         MinWidth="700"
-        MinHeight="480"
+        MinHeight="500"
+        Loaded="MainWindow_Loaded"
         WindowStartupLocation="CenterScreen">
     <Grid Margin="18">
         <Grid.RowDefinitions>
@@ -14,8 +15,8 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
@@ -75,106 +76,136 @@
                   MinHeight="30"
                   SelectionChanged="ProviderComboBox_SelectionChanged" />
 
-        <StackPanel Grid.Row="5"
-                    Grid.Column="0"
-                    Grid.ColumnSpan="3"
-                    Margin="0,10,0,0">
-            <Grid Margin="0,3">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="150" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock VerticalAlignment="Center"
-                           Text="Text source" />
-                <ComboBox x:Name="TextSourceComboBox"
-                          Grid.Column="1"
-                          MinHeight="28"
-                          SelectionChanged="TextSourceComboBox_SelectionChanged" />
-            </Grid>
-            <Grid Margin="0,3">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="150" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock VerticalAlignment="Center"
-                           Text="Unity scope" />
-                <CheckBox x:Name="UnityDialogueOnlyCheckBox"
-                          Grid.Column="1"
-                          VerticalAlignment="Center"
-                          Checked="UnityDialogueOnlyCheckBox_Changed"
-                          Unchecked="UnityDialogueOnlyCheckBox_Changed"
-                          Content="Translate dialogue / captions / choices / prose (unchecked = all visible text)" />
-            </Grid>
-            <Grid Margin="0,3">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="150" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock VerticalAlignment="Center"
-                           Text="Endpoint" />
-                <TextBox x:Name="EndpointTextBox"
-                         Grid.Column="1"
-                         MinHeight="28"
-                         VerticalContentAlignment="Center" />
-            </Grid>
-            <Grid Margin="0,3">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="150" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock VerticalAlignment="Center"
-                           Text="Ollama model" />
-                <TextBox x:Name="ModelTextBox"
-                         Grid.Column="1"
-                         MinHeight="28"
-                         VerticalContentAlignment="Center" />
-            </Grid>
-            <Grid Margin="0,3">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="150" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock VerticalAlignment="Center"
-                           Text="Overlay mode" />
-                <ComboBox x:Name="OverlayModeComboBox"
-                          Grid.Column="1"
-                          MinHeight="28" />
-            </Grid>
-            <Grid Margin="0,3">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="150" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock VerticalAlignment="Center"
-                           Text="Screenshots" />
-                <CheckBox x:Name="AllowScreenshotsCheckBox"
-                          Grid.Column="1"
-                          VerticalAlignment="Center"
-                          Checked="AllowScreenshotsCheckBox_Changed"
-                          Unchecked="AllowScreenshotsCheckBox_Changed"
-                          Content="Allow overlay to appear in screenshots (debug)" />
-            </Grid>
-        </StackPanel>
+        <!--
+            Keep the frequently changed provider/source settings scrollable.
+            This prevents them from stealing space from the status/log panel on
+            small displays or when Windows display scaling is above 100%.
+        -->
+        <ScrollViewer Grid.Row="5"
+                      Grid.Column="0"
+                      Grid.ColumnSpan="3"
+                      Margin="0,8,0,0"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="0,2,4,2">
+                <Grid Margin="0,3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               Text="Text source" />
+                    <ComboBox x:Name="TextSourceComboBox"
+                              Grid.Column="1"
+                              MinHeight="28"
+                              SelectionChanged="TextSourceComboBox_SelectionChanged" />
+                </Grid>
+                <Grid Margin="0,3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               Text="Unity scope" />
+                    <CheckBox x:Name="UnityDialogueOnlyCheckBox"
+                              Grid.Column="1"
+                              VerticalAlignment="Center"
+                              Checked="UnityDialogueOnlyCheckBox_Changed"
+                              Unchecked="UnityDialogueOnlyCheckBox_Changed"
+                              Content="Translate dialogue / captions / choices / prose (unchecked = all visible text)" />
+                </Grid>
+                <Grid Margin="0,3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               Text="Endpoint" />
+                    <TextBox x:Name="EndpointTextBox"
+                             Grid.Column="1"
+                             MinHeight="28"
+                             VerticalContentAlignment="Center" />
+                </Grid>
+                <Grid Margin="0,3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               Text="Ollama model" />
+                    <TextBox x:Name="ModelTextBox"
+                             Grid.Column="1"
+                             MinHeight="28"
+                             VerticalContentAlignment="Center" />
+                </Grid>
+                <Grid Margin="0,3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               Text="Overlay mode" />
+                    <ComboBox x:Name="OverlayModeComboBox"
+                              Grid.Column="1"
+                              MinHeight="28" />
+                </Grid>
+                <Grid Margin="0,3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               Text="Screenshots" />
+                    <CheckBox x:Name="AllowScreenshotsCheckBox"
+                              Grid.Column="1"
+                              VerticalAlignment="Center"
+                              Checked="AllowScreenshotsCheckBox_Changed"
+                              Unchecked="AllowScreenshotsCheckBox_Changed"
+                              Content="Allow overlay to appear in screenshots (debug)" />
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
 
+        <!--
+            Reserve space for runtime diagnostics. Long errors/status messages
+            scroll inside this panel rather than forcing the user to resize the
+            whole window just to read them.
+        -->
         <Border Grid.Row="6"
                 Grid.ColumnSpan="3"
-                Margin="0,18,0,12"
+                Height="136"
+                Margin="0,12,0,12"
                 Padding="12"
                 BorderBrush="#33000000"
                 BorderThickness="1"
                 CornerRadius="6">
-            <StackPanel>
-                <TextBlock FontWeight="SemiBold"
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0"
+                           FontWeight="SemiBold"
                            Text="Status" />
-                <TextBlock x:Name="StatusTextBlock"
-                           Margin="0,6,0,0"
-                           TextWrapping="Wrap"
-                           Text="Ready" />
-                <TextBlock Margin="0,12,0,0"
+
+                <ScrollViewer Grid.Row="1"
+                              Margin="0,6,0,4"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <TextBlock x:Name="StatusTextBlock"
+                               Padding="0,0,6,0"
+                               TextWrapping="Wrap"
+                               Text="Ready"
+                               ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
+                </ScrollViewer>
+
+                <TextBlock Grid.Row="2"
                            Foreground="Gray"
                            TextWrapping="Wrap"
                            Text="Tip: smart scope translates dialogue, cinematic captions, choices, tutorials, and readable prose while filtering HUD/menu noise." />
-            </StackPanel>
+            </Grid>
         </Border>
 
         <StackPanel Grid.Row="7"
