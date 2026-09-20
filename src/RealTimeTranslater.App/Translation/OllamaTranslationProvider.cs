@@ -467,6 +467,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 request.Context,
                 request.Text);
 
+        var recentDialogueContext =
+            BuildRecentDialogueContext(
+                request.Context,
+                request.Text);
+
         Exception? primaryError = null;
 
         try
@@ -478,6 +483,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     request.TargetLanguage,
                     speakerContext,
                     glossaryContext,
+                    recentDialogueContext,
                     structuredOutput: true,
                     strict: false,
                     cancellationToken);
@@ -523,6 +529,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     request.TargetLanguage,
                     speakerContext: string.Empty,
                     glossaryContext: glossaryContext,
+                    recentDialogueContext: string.Empty,
                     structuredOutput: false,
                     strict: true,
                     cancellationToken);
@@ -608,6 +615,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             BuildSpeakerContext(
                 context);
 
+        var recentDialogueContext =
+            BuildRecentDialogueContext(
+                context,
+                combinedSource);
+
         if (!string.IsNullOrWhiteSpace(
                 speakerContext))
         {
@@ -622,6 +634,16 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 "Mandatory game glossary. When a source term appears, use the specified target term exactly:");
             prompt.AppendLine(
                 glossaryContext);
+        }
+
+        if (!strict &&
+            !string.IsNullOrWhiteSpace(
+                recentDialogueContext))
+        {
+            prompt.AppendLine(
+                "Recent dialogue context for continuity only. Translate only the numbered current items:");
+            prompt.AppendLine(
+                recentDialogueContext);
         }
 
         prompt.Append(
@@ -839,10 +861,22 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 ? string.Empty
                 : $" {speakerContext}.";
 
+        var recentDialogueContext =
+            BuildRecentDialogueContext(
+                context,
+                sourceText);
+
+        var recentInstruction =
+            strict ||
+            string.IsNullOrWhiteSpace(
+                recentDialogueContext)
+                ? string.Empty
+                : $" Recent dialogue context for continuity only: {recentDialogueContext}";
+
         var prompt = strict
             ? $"Translate this {sourceName} text to {targetName}. Output only the complete {targetName} translation. {preservation}{glossaryInstruction}{speakerInstruction} Do not explain, repeat, continue, or omit.\n\n" +
               sourceText
-            : $"Translate {sourceName} to natural {targetName}. Preserve meaning, tone, hesitation, negation, and names. {preservation}{glossaryInstruction}{speakerInstruction} Output only the translation.\n\n" +
+            : $"Translate {sourceName} to natural {targetName}. Preserve meaning, tone, hesitation, negation, and names. {preservation}{glossaryInstruction}{speakerInstruction}{recentInstruction} Output only the translation.\n\n" +
               sourceText;
 
         var payload = new
@@ -882,6 +916,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         string targetLanguage,
         string speakerContext,
         string glossaryContext,
+        string recentDialogueContext,
         bool structuredOutput,
         bool strict,
         CancellationToken cancellationToken)
@@ -938,6 +973,16 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         {
             userText +=
                 $"Speaker context: {speakerContext}\n";
+        }
+
+        if (!strict &&
+            !string.IsNullOrWhiteSpace(
+                recentDialogueContext))
+        {
+            userText +=
+                "Recent dialogue context for continuity only; do not translate or continue it:\n" +
+                recentDialogueContext +
+                "\n";
         }
 
         userText +=
@@ -1284,6 +1329,50 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         return string.Join(
             "; ",
             entries);
+    }
+
+    private static string BuildRecentDialogueContext(
+        IReadOnlyList<string> context,
+        string currentSource)
+    {
+        var currentNormalized =
+            string.Join(
+                " ",
+                currentSource.Split(
+                    (char[]?)null,
+                    StringSplitOptions.RemoveEmptyEntries));
+
+        var lines =
+            context
+                .Select(line =>
+                    line.Trim())
+                .Where(line =>
+                    line.Length > 0 &&
+                    !line.StartsWith(
+                        "Glossary:",
+                        StringComparison.OrdinalIgnoreCase) &&
+                    !line.StartsWith(
+                        "Current speaker:",
+                        StringComparison.OrdinalIgnoreCase) &&
+                    line.Contains(
+                        "=>",
+                        StringComparison.Ordinal))
+                .Where(line =>
+                    !line.StartsWith(
+                        currentNormalized + " =>",
+                        StringComparison.Ordinal))
+                .Reverse()
+                .Take(3)
+                .Reverse()
+                .Select(line =>
+                    line.Length <= 180
+                        ? line
+                        : line[..180] + "…")
+                .ToArray();
+
+        return string.Join(
+            " | ",
+            lines);
     }
 
     private static string BuildSpeakerContext(
