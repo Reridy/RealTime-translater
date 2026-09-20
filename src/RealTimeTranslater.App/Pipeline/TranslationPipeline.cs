@@ -24,6 +24,7 @@ public sealed class TranslationPipeline : IDisposable
     private readonly string _sourceLanguage;
     private readonly string _targetLanguage;
     private readonly string _textSourceMode;
+    private readonly IReadOnlyList<string> _baseTranslationContext;
     private readonly UnityAdapterReceiver _unityAdapterReceiver = new();
     private readonly HashSet<string> _learnedUnityTextObjects =
         new(StringComparer.Ordinal);
@@ -65,6 +66,9 @@ public sealed class TranslationPipeline : IDisposable
         _sourceLanguage = sourceLanguage;
         _targetLanguage = targetLanguage;
         _textSourceMode = textSourceMode;
+        _baseTranslationContext =
+            BuildGlossaryContext(
+                settings.Translation.GlossaryText);
 
         _capture = new WindowCaptureService();
         _changeDetector = new FrameChangeDetector(settings.ChangeThreshold);
@@ -249,9 +253,12 @@ public sealed class TranslationPipeline : IDisposable
                             StartUnityTranslation(
                                 unityTextKey,
                                 unityRegions,
-                                UnityAdapterTextSelector
-                                    .BuildTranslationContext(
-                                        unitySnapshot),
+                                _baseTranslationContext
+                                    .Concat(
+                                        UnityAdapterTextSelector
+                                            .BuildTranslationContext(
+                                                unitySnapshot))
+                                    .ToArray(),
                                 cancellationToken);
                         }
 
@@ -403,7 +410,8 @@ public sealed class TranslationPipeline : IDisposable
                                     stableRegions,
                                     _sourceLanguage,
                                     _targetLanguage,
-                                    cancellationToken);
+                                    cancellationToken,
+                                    _baseTranslationContext);
 
                             var styled =
                                 PrepareOverlayRegions(
@@ -817,6 +825,83 @@ public sealed class TranslationPipeline : IDisposable
             "\u001e",
             selected.Select(region =>
                 region.Text.Trim()));
+    }
+
+    private static IReadOnlyList<string>
+        BuildGlossaryContext(
+            string glossaryText)
+    {
+        if (string.IsNullOrWhiteSpace(
+                glossaryText))
+        {
+            return Array.Empty<string>();
+        }
+
+        var entries =
+            new List<string>();
+
+        foreach (var rawLine in glossaryText
+                     .Replace("\r\n", "\n")
+                     .Replace("\r", "\n")
+                     .Split('\n'))
+        {
+            var line =
+                rawLine.Trim();
+
+            if (line.Length == 0 ||
+                line.StartsWith(
+                    "#",
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var separator =
+                line.IndexOf(
+                    "=>",
+                    StringComparison.Ordinal);
+
+            var separatorLength = 2;
+
+            if (separator < 0)
+            {
+                separator =
+                    line.IndexOf('=');
+                separatorLength = 1;
+            }
+
+            if (separator <= 0 ||
+                separator >=
+                    line.Length -
+                    separatorLength)
+            {
+                continue;
+            }
+
+            var source =
+                line[..separator]
+                    .Trim();
+
+            var target =
+                line[
+                    (separator +
+                     separatorLength)..]
+                    .Trim();
+
+            if (source.Length == 0 ||
+                target.Length == 0)
+            {
+                continue;
+            }
+
+            entries.Add(
+                $"Glossary: {source} => {target}");
+
+            if (entries.Count >= 32)
+                break;
+        }
+
+        return entries;
     }
 
     private static IReadOnlyList<TextRegion>
