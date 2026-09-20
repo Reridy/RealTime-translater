@@ -67,6 +67,88 @@ public sealed class TranslationCoordinatorTests
     }
 
 
+
+    [Fact]
+    public async Task PreservesOverlayLayoutMetadata()
+    {
+        var provider = new CountingProvider();
+        var coordinator = new TranslationCoordinator(provider);
+
+        var region = new TextRegion(
+            "hello",
+            new PixelRect(10, 20, 100, 30),
+            100f,
+            LayoutBounds: new PixelRect(5, 15, 300, 70),
+            ForegroundArgb: unchecked((int)0xFFFFFFFF),
+            SourceLineCount: 2,
+            SourceAlignment: "TopLeft");
+
+        var result = await coordinator.TranslateAsync(
+            new[] { region },
+            "en",
+            "ko",
+            CancellationToken.None);
+
+        Assert.Single(result);
+        Assert.Equal(region.LayoutBounds, result[0].LayoutBounds);
+        Assert.Equal(region.ForegroundArgb, result[0].ForegroundArgb);
+        Assert.Equal(region.SourceLineCount, result[0].SourceLineCount);
+        Assert.Equal(region.SourceAlignment, result[0].SourceAlignment);
+    }
+
+    [Fact]
+    public void PersistentCacheSurvivesNewInstance()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            "RealTimeTranslater.Tests",
+            Guid.NewGuid().ToString("N"),
+            "translation-cache.json");
+
+        try
+        {
+            var first = new TranslationCache(path);
+            first.Set(
+                "en",
+                "ko",
+                "Hello   world",
+                "안녕하세요");
+
+            var timeout = DateTime.UtcNow.AddSeconds(3);
+
+            while (!File.Exists(path) &&
+                   DateTime.UtcNow < timeout)
+            {
+                Thread.Sleep(50);
+            }
+
+            Assert.True(File.Exists(path));
+
+            var second = new TranslationCache(path);
+
+            Assert.True(
+                second.TryGet(
+                    "en",
+                    "ko",
+                    "Hello\nworld",
+                    out var translated));
+
+            Assert.Equal("안녕하세요", translated);
+        }
+        finally
+        {
+            var directory = Path.GetDirectoryName(path);
+
+            if (!string.IsNullOrWhiteSpace(directory) &&
+                Directory.Exists(directory))
+            {
+                Directory.Delete(
+                    directory,
+                    recursive: true);
+            }
+        }
+    }
+
     [Fact]
     public async Task UsesBatchProviderForMultipleCacheMisses()
     {
