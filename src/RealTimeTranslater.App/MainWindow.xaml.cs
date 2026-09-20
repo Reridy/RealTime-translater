@@ -93,6 +93,7 @@ public partial class MainWindow : Window
 
         OverlayModeComboBox.ItemsSource = new[]
         {
+            "Smart",
             "Replace",
             "Subtitle"
         };
