@@ -86,16 +86,13 @@ public partial class MainWindow : Window
 
         var maximumHeight =
             Math.Max(
-                440,
+                360,
                 workArea.Height - 24);
 
-        if (MinHeight > maximumHeight)
-        {
-            MinHeight =
-                Math.Max(
-                    420,
-                    maximumHeight);
-        }
+        MinHeight =
+            Math.Min(
+                MinHeight,
+                maximumHeight);
 
         MaxHeight =
             maximumHeight;
@@ -107,16 +104,13 @@ public partial class MainWindow : Window
 
         var maximumWidth =
             Math.Max(
-                680,
+                520,
                 workArea.Width - 24);
 
-        if (MinWidth > maximumWidth)
-        {
-            MinWidth =
-                Math.Max(
-                    640,
-                    maximumWidth);
-        }
+        MinWidth =
+            Math.Min(
+                MinWidth,
+                maximumWidth);
 
         MaxWidth =
             maximumWidth;
@@ -125,6 +119,18 @@ public partial class MainWindow : Window
             Math.Min(
                 760,
                 maximumWidth);
+
+        Left =
+            workArea.Left +
+            Math.Max(
+                0,
+                (workArea.Width - Width) / 2);
+
+        Top =
+            workArea.Top +
+            Math.Max(
+                0,
+                (workArea.Height - Height) / 2);
     }
 
     protected override void OnClosed(EventArgs e)
