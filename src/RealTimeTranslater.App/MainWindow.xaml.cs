@@ -73,6 +73,60 @@ public partial class MainWindow : Window
         RefreshWindows();
     }
 
+    private void MainWindow_Loaded(
+        object sender,
+        RoutedEventArgs e)
+    {
+        // Use the larger comfortable layout when possible, but never open
+        // taller than the usable desktop. On smaller/scaled displays the
+        // settings area becomes scrollable while the status/log panel and
+        // Start/Stop controls stay visible.
+        var workArea =
+            SystemParameters.WorkArea;
+
+        var maximumHeight =
+            Math.Max(
+                440,
+                workArea.Height - 24);
+
+        if (MinHeight > maximumHeight)
+        {
+            MinHeight =
+                Math.Max(
+                    420,
+                    maximumHeight);
+        }
+
+        MaxHeight =
+            maximumHeight;
+
+        Height =
+            Math.Min(
+                640,
+                maximumHeight);
+
+        var maximumWidth =
+            Math.Max(
+                680,
+                workArea.Width - 24);
+
+        if (MinWidth > maximumWidth)
+        {
+            MinWidth =
+                Math.Max(
+                    640,
+                    maximumWidth);
+        }
+
+        MaxWidth =
+            maximumWidth;
+
+        Width =
+            Math.Min(
+                760,
+                maximumWidth);
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         CaptureCurrentSettings();
