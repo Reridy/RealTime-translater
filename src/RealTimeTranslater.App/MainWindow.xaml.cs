@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using RealTimeTranslater.App.Capture;
 using RealTimeTranslater.App.Configuration;
+using RealTimeTranslater.App.Diagnostics;
 using RealTimeTranslater.App.Interop;
 using RealTimeTranslater.App.Ocr;
 using RealTimeTranslater.App.Overlay;
@@ -61,6 +63,9 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         _settings = AppSettings.Load();
+
+        SessionLog.Status(
+            "Main window initialized.");
 
         OcrLanguageComboBox.ItemsSource = new[]
         {
@@ -479,6 +484,10 @@ public partial class MainWindow : Window
                 }
                 catch (Exception ex)
                 {
+                    SessionLog.Warning(
+                        "Ollama warmup: " +
+                        ex.Message);
+
                     StatusTextBlock.Text =
                         "Ollama warmup warning: " +
                         ex.Message;
@@ -515,6 +524,9 @@ public partial class MainWindow : Window
                 }
                 catch (Exception ex)
                 {
+                    SessionLog.Error(
+                        ex);
+
                     _ = Dispatcher.BeginInvoke(() =>
                     {
                         StatusTextBlock.Text = $"Error: {ex.Message}";
@@ -534,6 +546,9 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            SessionLog.Error(
+                ex);
+
             _ocrService?.Dispose();
             _ocrService = null;
 
@@ -898,10 +913,44 @@ public partial class MainWindow : Window
 
     private void OnPipelineStatusChanged(string status)
     {
+        SessionLog.Status(
+            status);
+
         _ = Dispatcher.BeginInvoke(() =>
         {
             StatusTextBlock.Text = status;
         });
+    }
+
+    private void OpenLogButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        try
+        {
+            SessionLog.Initialize();
+
+            Process.Start(
+                new ProcessStartInfo
+                {
+                    FileName =
+                        SessionLog.FilePath,
+                    UseShellExecute = true
+                });
+        }
+        catch (Exception ex)
+        {
+            SessionLog.Error(
+                ex);
+
+            MessageBox.Show(
+                this,
+                "Could not open the diagnostics log.\n" +
+                SessionLog.FilePath,
+                "RealTime Translater",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
     }
 
     private void RefreshWindows()
