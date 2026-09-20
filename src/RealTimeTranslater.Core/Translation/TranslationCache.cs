@@ -10,6 +10,8 @@ public sealed class TranslationCache
 
     private readonly string? _persistencePath;
     private readonly object _persistenceGate = new();
+    private int _persistScheduled;
+    private int _persistVersion;
 
     public TranslationCache(string? persistencePath = null)
     {
@@ -46,7 +48,7 @@ public sealed class TranslationCache
                 text)] =
             translation;
 
-        PersistBestEffort();
+        SchedulePersistBestEffort();
     }
 
     public int Count => _cache.Count;
@@ -89,7 +91,64 @@ public sealed class TranslationCache
         }
     }
 
-    private void PersistBestEffort()
+    private void SchedulePersistBestEffort()
+    {
+        if (_persistencePath is null)
+            return;
+
+        Interlocked.Increment(
+            ref _persistVersion);
+
+        if (Interlocked.Exchange(
+                ref _persistScheduled,
+                1) != 0)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (true)
+                {
+                    var versionBeforeDelay =
+                        Volatile.Read(
+                            ref _persistVersion);
+
+                    await Task.Delay(
+                        TimeSpan.FromMilliseconds(450));
+
+                    PersistSnapshotBestEffort();
+
+                    if (versionBeforeDelay ==
+                        Volatile.Read(
+                            ref _persistVersion))
+                    {
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                Interlocked.Exchange(
+                    ref _persistScheduled,
+                    0);
+
+                // Close the tiny race where a Set arrives between the last
+                // version check and clearing the scheduled flag.
+                if (Volatile.Read(
+                        ref _persistVersion) > 0 &&
+                    !File.Exists(
+                        _persistencePath))
+                {
+                    SchedulePersistBestEffort();
+                }
+            }
+        });
+    }
+
+    private void PersistSnapshotBestEffort()
     {
         if (_persistencePath is null)
             return;
