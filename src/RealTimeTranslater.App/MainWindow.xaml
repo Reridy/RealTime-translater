@@ -44,7 +44,8 @@
                   Grid.Row="2"
                   Grid.Column="1"
                   Margin="0,4,8,4"
-                  MinHeight="30" />
+                  MinHeight="30"
+                  SelectionChanged="WindowComboBox_SelectionChanged" />
         <Button x:Name="RefreshWindowsButton"
                 Grid.Row="2"
                 Grid.Column="2"
