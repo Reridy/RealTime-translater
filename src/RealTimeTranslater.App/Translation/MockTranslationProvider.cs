@@ -11,6 +11,14 @@ public sealed class MockTranslationProvider : ITranslationProvider
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult($"[KO] {request.Text}");
+
+        var target =
+            TranslationQualityGuard
+                .NormalizeLanguageCode(
+                    request.TargetLanguage)
+                .ToUpperInvariant();
+
+        return Task.FromResult(
+            $"[{target}] {request.Text}");
     }
 }
