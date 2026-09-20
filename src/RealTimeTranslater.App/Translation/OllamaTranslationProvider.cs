@@ -284,6 +284,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                             item.Request.Text,
                             item.SourceLanguage,
                             item.Request.TargetLanguage,
+                            item.Request.Context,
                             translationBudget.Token);
                 }
 
@@ -521,7 +522,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     sourceLanguage,
                     request.TargetLanguage,
                     speakerContext: string.Empty,
-                    glossaryContext,
+                    glossaryContext: glossaryContext,
                     structuredOutput: false,
                     strict: true,
                     cancellationToken);
