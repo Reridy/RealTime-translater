@@ -133,14 +133,34 @@ public partial class MainWindow : Window
                 AllowScreenshotsCheckBox.IsChecked == true;
             _settings.Translation.Provider =
                 providerName;
-            _settings.Translation.OllamaEndpoint =
-                EndpointTextBox.Text.Trim().Length == 0
-                    ? _settings.Translation.OllamaEndpoint
-                    : EndpointTextBox.Text.Trim();
-            _settings.Translation.OllamaModel =
-                ModelTextBox.Text.Trim().Length == 0
-                    ? _settings.Translation.OllamaModel
-                    : ModelTextBox.Text.Trim();
+            var configuredEndpoint =
+                EndpointTextBox.Text.Trim();
+
+            if (configuredEndpoint.Length > 0)
+            {
+                if (string.Equals(
+                        providerName,
+                        "LibreTranslate",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    _settings.Translation.LibreTranslateEndpoint =
+                        configuredEndpoint;
+                }
+                else
+                {
+                    _settings.Translation.OllamaEndpoint =
+                        configuredEndpoint;
+                }
+            }
+
+            var configuredModel =
+                ModelTextBox.Text.Trim();
+
+            if (configuredModel.Length > 0)
+            {
+                _settings.Translation.OllamaModel =
+                    configuredModel;
+            }
 
             _settings.Save();
 
@@ -316,7 +336,21 @@ public partial class MainWindow : Window
             EndpointTextBox.Text.Trim();
 
         if (endpoint.Length > 0)
-            _settings.Translation.OllamaEndpoint = endpoint;
+        {
+            if (string.Equals(
+                    _settings.Translation.Provider,
+                    "LibreTranslate",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                _settings.Translation.LibreTranslateEndpoint =
+                    endpoint;
+            }
+            else
+            {
+                _settings.Translation.OllamaEndpoint =
+                    endpoint;
+            }
+        }
 
         var model =
             ModelTextBox.Text.Trim();
