@@ -23,6 +23,16 @@ internal sealed class UnityAdapterRegionDto
     public int Y { get; set; }
     public int Width { get; set; }
     public int Height { get; set; }
+
+    // Optional protocol 2+ layout/style metadata. Older adapters leave these
+    // at their default values and the desktop app falls back gracefully.
+    public int LayoutX { get; set; }
+    public int LayoutY { get; set; }
+    public int LayoutWidth { get; set; }
+    public int LayoutHeight { get; set; }
+    public int ForegroundArgb { get; set; }
+    public int SourceLineCount { get; set; }
+    public string SourceAlignment { get; set; } = string.Empty;
 }
 
 internal sealed record UnityAdapterSnapshot(
