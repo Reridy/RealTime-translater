@@ -95,6 +95,18 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <TextBlock VerticalAlignment="Center"
+                               Text="OCR area" />
+                    <ComboBox x:Name="OcrRegionComboBox"
+                              Grid.Column="1"
+                              MinHeight="28"
+                              ToolTip="Limit OCR to the part of the game where text usually appears. Unity Adapter text is unaffected." />
+                </Grid>
+                <Grid Margin="0,3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center"
                                Text="Text source" />
                     <ComboBox x:Name="TextSourceComboBox"
                               Grid.Column="1"
