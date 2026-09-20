@@ -215,9 +215,20 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="0"
-                           FontWeight="SemiBold"
-                           Text="Status" />
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               VerticalAlignment="Center"
+                               FontWeight="SemiBold"
+                               Text="Status" />
+                    <Button Grid.Column="1"
+                            Padding="8,2"
+                            Click="OpenLogButton_Click"
+                            Content="Diagnostics" />
+                </Grid>
 
                 <ScrollViewer Grid.Row="1"
                               Margin="0,6,0,4"
