@@ -75,12 +75,9 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             request.Text,
             request.SourceLanguage);
 
-        if (string.Equals(
-                TranslationQualityGuard.NormalizeLanguageCode(
-                    sourceLanguage),
-                TranslationQualityGuard.NormalizeLanguageCode(
-                    request.TargetLanguage),
-                StringComparison.OrdinalIgnoreCase))
+        if (TranslationQualityGuard.IsSameLanguage(
+                sourceLanguage,
+                request.TargetLanguage))
         {
             return request.Text.Trim();
         }
@@ -164,12 +161,9 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                         request.Text,
                         request.SourceLanguage);
 
-                if (string.Equals(
-                        TranslationQualityGuard.NormalizeLanguageCode(
-                            detectedSource),
-                        TranslationQualityGuard.NormalizeLanguageCode(
-                            request.TargetLanguage),
-                        StringComparison.OrdinalIgnoreCase))
+                if (TranslationQualityGuard.IsSameLanguage(
+                        detectedSource,
+                        request.TargetLanguage))
                 {
                     results[i] =
                         request.Text.Trim();
@@ -1217,7 +1211,19 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
 
     private static string LanguageName(
         string code)
-        => TranslationQualityGuard
+    {
+        var full =
+            TranslationQualityGuard
+                .NormalizeFullLanguageCode(
+                    code);
+
+        if (full == "zh-cn")
+            return "Simplified Chinese";
+
+        if (full == "zh-tw")
+            return "Traditional Chinese";
+
+        return TranslationQualityGuard
             .NormalizeLanguageCode(code) switch
         {
             "en" => "English",
@@ -1235,9 +1241,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             "th" => "Thai",
             "pl" => "Polish",
             "tr" => "Turkish",
+            "nl" => "Dutch",
             "ar" => "Arabic",
             _ => "the selected target language"
         };
+    }
 
     private static string PreservationInstruction(
         string sourceLanguage,
@@ -1256,7 +1264,9 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         var targetName =
             LanguageName(target);
 
-        if (source == target)
+        if (TranslationQualityGuard.IsSameLanguage(
+                sourceLanguage,
+                targetLanguage))
         {
             return
                 $"Keep wording already written in {targetName} unchanged when appropriate.";
