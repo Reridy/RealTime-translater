@@ -189,7 +189,12 @@ public sealed class TranslationCoordinator
                     entry.Text,
                     translated,
                     entry.Region.Bounds,
-                    entry.Region.Confidence));
+                    entry.Region.Confidence,
+                    BackgroundArgb: null,
+                    LayoutBounds: entry.Region.LayoutBounds,
+                    ForegroundArgb: entry.Region.ForegroundArgb,
+                    SourceLineCount: entry.Region.SourceLineCount,
+                    SourceAlignment: entry.Region.SourceAlignment));
 
             Remember(
                 $"{entry.Text} => {translated}");
