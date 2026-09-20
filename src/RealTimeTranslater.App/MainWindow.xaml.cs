@@ -564,6 +564,7 @@ public partial class MainWindow : Window
                         {
                             _activePipeline = null;
                             RetranslateButton.IsEnabled = false;
+                            CorrectTranslationButton.IsEnabled = false;
                         }
                     });
                 }
@@ -572,6 +573,7 @@ public partial class MainWindow : Window
             StartButton.IsEnabled = false;
             StopButton.IsEnabled = true;
             RetranslateButton.IsEnabled = true;
+            CorrectTranslationButton.IsEnabled = true;
             StatusTextBlock.Text = "Starting...";
         }
         catch (Exception ex)
@@ -601,6 +603,46 @@ public partial class MainWindow : Window
         object sender,
         RoutedEventArgs e)
         => RequestFreshRetranslate();
+
+    private void CorrectTranslationButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_activePipeline is null)
+        {
+            StatusTextBlock.Text =
+                "Translation correction is available while translation is running.";
+            return;
+        }
+
+        var entries =
+            _activePipeline.GetCurrentTranslations();
+
+        if (entries.Count == 0)
+        {
+            StatusTextBlock.Text =
+                "No current translation is available to correct yet.";
+            return;
+        }
+
+        var editor =
+            new TranslationCorrectionWindow(
+                entries)
+            {
+                Owner = this
+            };
+
+        if (editor.ShowDialog() != true)
+            return;
+
+        if (_activePipeline.ApplyCorrection(
+                editor.SelectedSourceText,
+                editor.CorrectedTranslation))
+        {
+            StatusTextBlock.Text =
+                "Correction saved to translation memory · refreshing current text";
+        }
+    }
 
     private void RequestFreshRetranslate()
     {
@@ -960,6 +1002,7 @@ public partial class MainWindow : Window
         StartButton.IsEnabled = true;
         StopButton.IsEnabled = false;
         RetranslateButton.IsEnabled = false;
+        CorrectTranslationButton.IsEnabled = false;
         StatusTextBlock.Text = "Stopped";
     }
 
