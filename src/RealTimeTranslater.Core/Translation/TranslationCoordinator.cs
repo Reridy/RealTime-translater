@@ -203,6 +203,40 @@ public sealed class TranslationCoordinator
         return result;
     }
 
+    public int Invalidate(
+        IEnumerable<string> sourceLanguages,
+        string targetLanguage,
+        IEnumerable<string> texts)
+    {
+        var removed = 0;
+
+        foreach (var sourceLanguage in
+                 sourceLanguages
+                     .Where(language =>
+                         !string.IsNullOrWhiteSpace(language))
+                     .Distinct(
+                         StringComparer.OrdinalIgnoreCase))
+        {
+            foreach (var text in
+                     texts
+                         .Where(value =>
+                             !string.IsNullOrWhiteSpace(value))
+                         .Distinct(
+                             StringComparer.Ordinal))
+            {
+                if (_cache.Remove(
+                        sourceLanguage,
+                        targetLanguage,
+                        text))
+                {
+                    removed++;
+                }
+            }
+        }
+
+        return removed;
+    }
+
     private IReadOnlyList<string> BuildRequestContext(
         IReadOnlyList<string>? additionalContext)
     {
