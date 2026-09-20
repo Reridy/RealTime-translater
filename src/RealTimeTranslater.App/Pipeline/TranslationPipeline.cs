@@ -1091,7 +1091,7 @@ public sealed class TranslationPipeline : IDisposable
                 "safe Korean translation",
                 StringComparison.OrdinalIgnoreCase))
         {
-            return "model output failed Korean quality checks";
+            return "model output failed target-language quality checks";
         }
 
         if (message.Contains(
