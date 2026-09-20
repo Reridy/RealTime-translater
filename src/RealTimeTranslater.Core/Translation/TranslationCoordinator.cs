@@ -203,6 +203,33 @@ public sealed class TranslationCoordinator
         return result;
     }
 
+    public void StoreCorrection(
+        IEnumerable<string> sourceLanguages,
+        string targetLanguage,
+        string sourceText,
+        string correctedTranslation)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText) ||
+            string.IsNullOrWhiteSpace(correctedTranslation))
+        {
+            return;
+        }
+
+        foreach (var sourceLanguage in
+                 sourceLanguages
+                     .Where(language =>
+                         !string.IsNullOrWhiteSpace(language))
+                     .Distinct(
+                         StringComparer.OrdinalIgnoreCase))
+        {
+            _cache.Set(
+                sourceLanguage,
+                targetLanguage,
+                sourceText,
+                correctedTranslation.Trim());
+        }
+    }
+
     public int Invalidate(
         IEnumerable<string> sourceLanguages,
         string targetLanguage,
