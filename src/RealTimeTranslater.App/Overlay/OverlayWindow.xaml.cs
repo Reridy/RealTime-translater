@@ -51,106 +51,76 @@ public partial class OverlayWindow : Window
         TranslatedRegion region,
         double dpiScale)
     {
-        var sourceWidth = Math.Max(
-            16,
-            region.Bounds.Width / dpiScale);
-        var sourceHeight = Math.Max(
-            12,
-            region.Bounds.Height / dpiScale);
-
         var sourceText =
             region.OriginalText?.Trim() ??
             string.Empty;
 
-        var translatedText = LimitOverlayText(
-            region.TranslatedText,
-            maxCharacters: 520,
-            maxLines: 8);
+        var translatedText =
+            LimitOverlayText(
+                region.TranslatedText,
+                maxCharacters: 520,
+                maxLines: 8);
 
-        var sourceLineEstimate = Math.Max(
-            1,
-            sourceText.Count(ch => ch == '\n') + 1);
+        if (translatedText.Length == 0)
+            return;
 
-        var looksLikeLongContent =
-            sourceText.Length >= 42 ||
-            sourceLineEstimate >= 2;
-
-        var prefersLeftAlignment =
-            looksLikeLongContent ||
-            sourceWidth >= Width * 0.24 ||
-            sourceText.Length >= 24;
-
-        // Tight replace mode deliberately masks only the rendered source
-        // glyph area plus a tiny safety margin. The adapter now supplies
-        // TextMeshPro's actual text bounds instead of the whole RectTransform.
-        var horizontalPadding =
-            looksLikeLongContent ? 3.0 : 2.0;
-        var verticalPadding =
-            looksLikeLongContent ? 2.5 : 1.5;
-
-        var maximumWidth =
+        var sourceLeft =
+            region.Bounds.X / dpiScale;
+        var sourceTop =
+            region.Bounds.Y / dpiScale;
+        var sourceWidth =
             Math.Max(
-                20,
-                Width - 4);
-
-        var boxWidth = Math.Min(
-            sourceWidth +
-                horizontalPadding * 2,
-            maximumWidth);
-
-        // Prefer shrinking Korean text over expanding the mask into nearby
-        // portraits, buttons, or decorative dialogue UI.
-        var preferredHeight =
-            sourceHeight +
-            verticalPadding * 2;
-
-        var maximumHeight =
-            looksLikeLongContent
-                ? Math.Min(
-                    Math.Max(
-                        preferredHeight + 4,
-                        sourceHeight * 1.10),
-                    Height * 0.34)
-                : preferredHeight + 2;
-
-        var minimumFontSize =
-            Math.Min(
-                _settings.MinimumFontSize,
-                11.0);
-
-        var estimatedLineHeight =
-            sourceHeight /
+                2,
+                region.Bounds.Width / dpiScale);
+        var sourceHeight =
             Math.Max(
-                1,
-                sourceLineEstimate);
+                2,
+                region.Bounds.Height / dpiScale);
 
-        var preferredFontSize =
-            Math.Clamp(
-                estimatedLineHeight * 0.84,
-                minimumFontSize,
-                Math.Min(
-                    _settings.MaximumFontSize,
-                    28));
+        var layout =
+            region.LayoutBounds ??
+            region.Bounds;
 
-        var availableWidth =
+        var layoutLeft =
+            layout.X / dpiScale;
+        var layoutTop =
+            layout.Y / dpiScale;
+        var layoutWidth =
             Math.Max(
-                16,
-                boxWidth -
-                horizontalPadding * 2);
+                sourceWidth,
+                layout.Width / dpiScale);
+        var layoutHeight =
+            Math.Max(
+                sourceHeight,
+                layout.Height / dpiScale);
 
-        var availableHeight =
+        layoutLeft = Math.Clamp(
+            layoutLeft,
+            0,
+            Math.Max(
+                0,
+                Width - 1));
+
+        layoutTop = Math.Clamp(
+            layoutTop,
+            0,
+            Math.Max(
+                0,
+                Height - 1));
+
+        layoutWidth = Math.Clamp(
+            layoutWidth,
+            12,
             Math.Max(
                 12,
-                maximumHeight -
-                verticalPadding * 2);
+                Width - layoutLeft));
 
-        var fontSize = FitFontSize(
-            translatedText,
-            preferredFontSize,
-            minimumFontSize,
-            availableWidth,
-            availableHeight,
-            topAligned: prefersLeftAlignment);
+        layoutHeight = Math.Clamp(
+            layoutHeight,
+            12,
+            Math.Max(
+                12,
+                Height - layoutTop));
 
         var replaceBackground =
             ResolveReplaceBackground(
@@ -158,7 +128,132 @@ public partial class OverlayWindow : Window
 
         var replaceForeground =
             ResolveReplaceForeground(
+                region.ForegroundArgb,
                 replaceBackground.Color);
+
+        // Erase only the rendered source glyph rectangle. The translated text
+        // itself is laid out separately inside Unity's original text container,
+        // so we do not need a large opaque panel behind the translation.
+        var maskPaddingX = 2.5;
+        var maskPaddingY = 2.0;
+
+        var maskWidth =
+            Math.Min(
+                Width,
+                sourceWidth +
+                maskPaddingX * 2);
+
+        var maskHeight =
+            Math.Min(
+                Height,
+                sourceHeight +
+                maskPaddingY * 2);
+
+        var maskLeft =
+            Math.Clamp(
+                sourceLeft -
+                maskPaddingX,
+                0,
+                Math.Max(
+                    0,
+                    Width - maskWidth));
+
+        var maskTop =
+            Math.Clamp(
+                sourceTop -
+                maskPaddingY,
+                0,
+                Math.Max(
+                    0,
+                    Height - maskHeight));
+
+        var mask = new Border
+        {
+            Width = maskWidth,
+            Height = maskHeight,
+            Background = replaceBackground,
+            CornerRadius = new CornerRadius(0),
+            IsHitTestVisible = false,
+            SnapsToDevicePixels = true
+        };
+
+        Canvas.SetLeft(
+            mask,
+            maskLeft);
+        Canvas.SetTop(
+            mask,
+            maskTop);
+
+        OverlayCanvas.Children.Add(
+            mask);
+
+        var sourceLineCount =
+            Math.Max(
+                1,
+                region.SourceLineCount ??
+                (sourceText.Count(ch => ch == '\n') + 1));
+
+        var lineHeightEstimate =
+            sourceHeight /
+            sourceLineCount;
+
+        var minimumFontSize =
+            Math.Min(
+                _settings.MinimumFontSize,
+                10.5);
+
+        var preferredFontSize =
+            Math.Clamp(
+                lineHeightEstimate * 0.88,
+                minimumFontSize,
+                Math.Min(
+                    _settings.MaximumFontSize,
+                    30));
+
+        var horizontalPadding =
+            Math.Clamp(
+                preferredFontSize * 0.12,
+                1.5,
+                4.0);
+
+        var verticalPadding =
+            Math.Clamp(
+                preferredFontSize * 0.06,
+                1.0,
+                3.0);
+
+        var textAlignment =
+            ResolveTextAlignment(
+                region.SourceAlignment,
+                sourceText,
+                layoutWidth);
+
+        var verticalAlignment =
+            ResolveVerticalAlignment(
+                region.SourceAlignment);
+
+        var availableWidth =
+            Math.Max(
+                10,
+                layoutWidth -
+                horizontalPadding * 2);
+
+        var availableHeight =
+            Math.Max(
+                10,
+                layoutHeight -
+                verticalPadding * 2);
+
+        var fontSize =
+            FitFontSize(
+                translatedText,
+                preferredFontSize,
+                minimumFontSize,
+                availableWidth,
+                availableHeight,
+                topAligned:
+                    textAlignment ==
+                    TextAlignment.Left);
 
         var textBlock = new TextBlock
         {
@@ -168,77 +263,40 @@ public partial class OverlayWindow : Window
             FontSize = fontSize,
             TextWrapping = TextWrapping.Wrap,
             TextTrimming = TextTrimming.None,
-            TextAlignment = prefersLeftAlignment
-                ? TextAlignment.Left
-                : TextAlignment.Center,
-            VerticalAlignment = prefersLeftAlignment
-                ? VerticalAlignment.Top
-                : VerticalAlignment.Center,
+            TextAlignment = textAlignment,
+            VerticalAlignment = verticalAlignment,
             LineStackingStrategy =
                 LineStackingStrategy.BlockLineHeight,
-            LineHeight = fontSize * 1.17
+            LineHeight = fontSize * 1.16,
+            IsHitTestVisible = false
         };
 
-        var border = new Border
+        var textContainer = new Border
         {
-            Width = boxWidth,
-            MinHeight = preferredHeight,
-            MaxHeight = maximumHeight,
+            Width = layoutWidth,
+            Height = layoutHeight,
             Padding = new Thickness(
                 horizontalPadding,
                 verticalPadding,
                 horizontalPadding,
                 verticalPadding),
-            CornerRadius =
-                new CornerRadius(0),
-            Background =
-                replaceBackground,
+            Background = Brushes.Transparent,
             Child = textBlock,
             IsHitTestVisible = false,
             ClipToBounds = true,
             SnapsToDevicePixels = true
         };
 
-        border.Measure(
-            new Size(
-                boxWidth,
-                maximumHeight));
-
-        var measuredHeight = Math.Clamp(
-            border.DesiredSize.Height,
-            preferredHeight,
-            maximumHeight);
-
-        var x =
-            region.Bounds.X / dpiScale -
-            horizontalPadding;
-
-        var y =
-            region.Bounds.Y / dpiScale -
-            verticalPadding;
-
-        x = Math.Clamp(
-            x,
-            2,
-            Math.Max(
-                2,
-                Width - boxWidth - 2));
-
-        y = Math.Clamp(
-            y,
-            2,
-            Math.Max(
-                2,
-                Height - measuredHeight - 2));
-
         Canvas.SetLeft(
-            border,
-            x);
+            textContainer,
+            layoutLeft);
+
         Canvas.SetTop(
-            border,
-            y);
+            textContainer,
+            layoutTop);
+
         OverlayCanvas.Children.Add(
-            border);
+            textContainer);
     }
 
     private static SolidColorBrush ResolveReplaceBackground(
@@ -266,8 +324,48 @@ public partial class OverlayWindow : Window
     }
 
     private static Brush ResolveReplaceForeground(
+        int? foregroundArgb,
         Color background)
     {
+        if (foregroundArgb is int argb)
+        {
+            var value =
+                unchecked((uint)argb);
+
+            var red =
+                (byte)((value >> 16) & 0xFF);
+            var green =
+                (byte)((value >> 8) & 0xFF);
+            var blue =
+                (byte)(value & 0xFF);
+
+            var sourceLuminance =
+                (
+                    0.2126 * red +
+                    0.7152 * green +
+                    0.0722 * blue
+                ) / 255.0;
+
+            var backgroundLuminance =
+                (
+                    0.2126 * background.R +
+                    0.7152 * background.G +
+                    0.0722 * background.B
+                ) / 255.0;
+
+            if (Math.Abs(
+                    sourceLuminance -
+                    backgroundLuminance) >=
+                0.28)
+            {
+                return new SolidColorBrush(
+                    Color.FromRgb(
+                        red,
+                        green,
+                        blue));
+            }
+        }
+
         var luminance =
             (
                 0.2126 * background.R +
@@ -282,6 +380,80 @@ public partial class OverlayWindow : Window
                     22,
                     22))
             : Brushes.White;
+    }
+
+    private static TextAlignment ResolveTextAlignment(
+        string? sourceAlignment,
+        string sourceText,
+        double layoutWidth)
+    {
+        if (!string.IsNullOrWhiteSpace(
+                sourceAlignment))
+        {
+            if (sourceAlignment.Contains(
+                    "Right",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return TextAlignment.Right;
+            }
+
+            if (sourceAlignment.Contains(
+                    "Center",
+                    StringComparison.OrdinalIgnoreCase) ||
+                sourceAlignment.Contains(
+                    "Midline",
+                    StringComparison.OrdinalIgnoreCase) &&
+                !sourceAlignment.Contains(
+                    "Left",
+                    StringComparison.OrdinalIgnoreCase) &&
+                !sourceAlignment.Contains(
+                    "Right",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return TextAlignment.Center;
+            }
+
+            if (sourceAlignment.Contains(
+                    "Left",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return TextAlignment.Left;
+            }
+        }
+
+        return sourceText.Length >= 24 ||
+            layoutWidth >= 320
+                ? TextAlignment.Left
+                : TextAlignment.Center;
+    }
+
+    private static VerticalAlignment ResolveVerticalAlignment(
+        string? sourceAlignment)
+    {
+        if (string.IsNullOrWhiteSpace(
+                sourceAlignment))
+        {
+            return VerticalAlignment.Top;
+        }
+
+        if (sourceAlignment.Contains(
+                "Bottom",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return VerticalAlignment.Bottom;
+        }
+
+        if (sourceAlignment.Contains(
+                "Midline",
+                StringComparison.OrdinalIgnoreCase) ||
+            sourceAlignment.Equals(
+                "Center",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return VerticalAlignment.Center;
+        }
+
+        return VerticalAlignment.Top;
     }
 
     private static double FitFontSize(
@@ -303,7 +475,7 @@ public partial class OverlayWindow : Window
             var probe = new TextBlock
             {
                 Text = text,
-                FontWeight = FontWeights.SemiBold,
+                FontWeight = FontWeights.Normal,
                 FontSize = size,
                 TextWrapping = TextWrapping.Wrap,
                 TextAlignment = topAligned
