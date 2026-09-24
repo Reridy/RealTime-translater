@@ -10,7 +10,7 @@ The Browser Companion gives RealTime Translater structured browser text before O
 - Multiple visible browser windows/tabs are tracked independently and matched to the selected browser window by title.
 - If the companion is unavailable, stale, hidden, or does not match the selected target, **Auto (Recommended)** falls back immediately to another source.
 
-No browsing history is uploaded. The extension sends only the current visible page title/URL metadata and visible text regions to `127.0.0.1:47852` on the same PC. The desktop bridge uses a loopback-only TCP listener, so it does not require a Windows HTTP URL reservation or administrator privileges.
+No browsing history is uploaded. The extension sends only the current visible page title/URL metadata and visible text regions to `127.0.0.1:47852` on the same PC. The content script never talks to localhost directly: a Manifest V3 service worker owns the loopback request, coalesces superseded per-tab updates, and adds a bridge marker that the desktop receiver validates. Normal web-page origins are rejected by the desktop bridge. The listener is loopback-only, so it does not require a Windows HTTP URL reservation or administrator privileges.
 
 ## Install for development
 
@@ -20,6 +20,6 @@ No browsing history is uploaded. The extension sends only the current visible pa
 4. Select the repository's `browser-extension` folder.
 5. Start RealTime Translater and choose **Auto (Recommended)** or **Browser Companion + OCR fallback**.
 
-YouTube captions should then appear in Diagnostics/Status as **YouTube Captions**. Other pages report **Browser DOM**.
+YouTube captions should then appear in Diagnostics/Status as **YouTube Captions**. Other pages report **Browser DOM**. While YouTube is still growing a caption, the companion marks it partial; after a short quiet period it promotes the exact same caption to final so the translator can persist it without issuing a second model call.
 
-The companion is Manifest V3 and requires no build step.
+The companion is Manifest V3 and requires no build step. After pulling an update to the repository, open the extensions page and press **Reload** on RealTime Translater Browser Companion so changes to the service worker/content script take effect.
