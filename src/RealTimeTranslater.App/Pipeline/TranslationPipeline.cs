@@ -1165,6 +1165,8 @@ public sealed class TranslationPipeline : IDisposable
             string.Empty;
         _pendingUnityTextSince =
             DateTimeOffset.MinValue;
+        _lastSpeculativeStartedText =
+            string.Empty;
     }
 
     private static IReadOnlyList<TranslatedRegion>
