@@ -4,7 +4,7 @@
   "StabilityFrames": 2,
   "OcrLanguage": "jpn+eng",
   "OcrRegion": "Full window",
-  "TextSource": "OCR",
+  "TextSource": "Auto (Recommended)",
   "UnityDialogueOnly": true,
   "OcrDataPath": "tessdata",
   "MinimumOcrConfidence": 45.0,
