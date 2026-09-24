@@ -271,6 +271,46 @@ public sealed class TranslationCoordinator
             (int)left,
             (int)right);
 
+    public void CommitTransient(
+        IReadOnlyList<TranslatedRegion> translations,
+        IEnumerable<string> sourceLanguages,
+        string targetLanguage)
+    {
+        if (translations.Count == 0)
+            return;
+
+        var languages =
+            sourceLanguages
+                .Where(language =>
+                    !string.IsNullOrWhiteSpace(language))
+                .Distinct(
+                    StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+        foreach (var translation in translations)
+        {
+            if (string.IsNullOrWhiteSpace(
+                    translation.OriginalText) ||
+                string.IsNullOrWhiteSpace(
+                    translation.TranslatedText))
+            {
+                continue;
+            }
+
+            foreach (var sourceLanguage in languages)
+            {
+                _cache.Set(
+                    sourceLanguage,
+                    targetLanguage,
+                    translation.OriginalText,
+                    translation.TranslatedText);
+            }
+
+            Remember(
+                $"{translation.OriginalText} => {translation.TranslatedText}");
+        }
+    }
+
     public void StoreCorrection(
         IEnumerable<string> sourceLanguages,
         string targetLanguage,
