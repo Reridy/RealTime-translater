@@ -23,6 +23,22 @@ Success criterion:
 
 A user can open a Japanese visual novel in windowed mode, choose its window, and see stable translated text drawn over recognized text regions.
 
+## Universal realtime source layer
+
+Implemented on the current feature branch:
+
+- ✅ Auto Source Resolver with continuous source health/freshness promotion and OCR fallback
+- ✅ Manifest V3 Browser Companion over localhost
+- ✅ YouTube rendered-caption adapter
+- ✅ generic visible DOM adapter
+- ✅ automatic Fast / Standard / Quality difficulty routing inside the user-selected translation mode
+- ✅ failed Fast translations escalate to larger validation/recovery budgets
+- ✅ speculative/typewriter translation with debounce, prefix-growth coalescing, stale-request cancellation, and final-sentence promotion
+- ✅ source age, route, cache-hit, provider-call, and translation-latency diagnostics
+- ⏳ audio/ASR source adapter
+- ⏳ Windows UI Automation/accessibility source adapter
+- ⏳ browser-extension store packaging and signing
+
 ## Phase 1 - Make visual novels good
 
 Priority:
@@ -109,7 +125,7 @@ Targets:
 - capture latency below one frame at 60 Hz
 - text-change detection below 2 ms on common 1080p scenes
 - no OCR work on unchanged dialogue
-- asynchronous provider calls with cancellation and debouncing
+- ✅ asynchronous provider calls with cancellation, prefix coalescing, and speculative debouncing
 - translation cache persisted on disk
 - bounded memory
 - overlay updates without flicker
