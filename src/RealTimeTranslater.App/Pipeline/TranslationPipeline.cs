@@ -407,6 +407,7 @@ public sealed class TranslationPipeline : IDisposable
                                             .BuildTranslationContext(
                                                 unitySnapshot))
                                     .ToArray(),
+                                speculative.IsFinal,
                                 cancellationToken);
                         }
 
@@ -656,6 +657,7 @@ public sealed class TranslationPipeline : IDisposable
                             await DelayRemaining(
                                 loopStart,
                                 frameInterval,
+                                speculative.IsFinal,
                                 cancellationToken);
                             continue;
                         }
@@ -671,7 +673,9 @@ public sealed class TranslationPipeline : IDisposable
                                     _sourceLanguage,
                                     _targetLanguage,
                                     cancellationToken,
-                                    _baseTranslationContext);
+                                    _baseTranslationContext,
+                                    transient:
+                                        !speculative.IsFinal);
 
                             _lastVisibleTranslations =
                                 translated.ToArray();
@@ -943,6 +947,7 @@ public sealed class TranslationPipeline : IDisposable
                 textKey,
                 regions,
                 browserContext,
+                speculative.IsFinal,
                 cancellationToken);
         }
 
@@ -1017,6 +1022,7 @@ public sealed class TranslationPipeline : IDisposable
         string textKey,
         IReadOnlyList<TextRegion> regions,
         IReadOnlyList<string> context,
+        bool isFinal,
         CancellationToken cancellationToken)
     {
         CancelUnityTranslation();
@@ -1034,6 +1040,7 @@ public sealed class TranslationPipeline : IDisposable
                 textKey,
                 regions,
                 context,
+                isFinal,
                 _unityTranslationCancellation.Token);
     }
 
@@ -1055,7 +1062,9 @@ public sealed class TranslationPipeline : IDisposable
                     "auto",
                     _targetLanguage,
                     cancellationToken,
-                    context);
+                    context,
+                    transient:
+                        !isFinal);
 
             return new UnityTranslationAttempt(
                 textKey,
@@ -1063,7 +1072,8 @@ public sealed class TranslationPipeline : IDisposable
                 Stopwatch.GetElapsedTime(started)
                     .TotalMilliseconds,
                 Error: null,
-                Canceled: false);
+                Canceled: false,
+                IsFinal: isFinal);
         }
         catch (OperationCanceledException)
         {
@@ -1073,7 +1083,8 @@ public sealed class TranslationPipeline : IDisposable
                 Stopwatch.GetElapsedTime(started)
                     .TotalMilliseconds,
                 Error: null,
-                Canceled: true);
+                Canceled: true,
+                IsFinal: isFinal);
         }
         catch (Exception ex)
         {
@@ -1083,7 +1094,8 @@ public sealed class TranslationPipeline : IDisposable
                 Stopwatch.GetElapsedTime(started)
                     .TotalMilliseconds,
                 Error: ex,
-                Canceled: false);
+                Canceled: false,
+                IsFinal: isFinal);
         }
     }
 
@@ -1822,5 +1834,6 @@ public sealed class TranslationPipeline : IDisposable
         IReadOnlyList<TranslatedRegion> Translations,
         double ElapsedMilliseconds,
         Exception? Error,
-        bool Canceled);
+        bool Canceled,
+        bool IsFinal);
 }
