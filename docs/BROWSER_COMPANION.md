@@ -4,11 +4,13 @@ The Browser Companion gives RealTime Translater structured browser text before O
 
 ## Supported paths
 
-- YouTube: reads the currently rendered caption segments directly from the player DOM.
+- YouTube: reads the currently rendered caption segments directly from the player DOM and coalesces them into one low-latency translation unit.
+- YouTube without rendered captions: intentionally yields to OCR today instead of translating page chrome; an audio/ASR source can occupy this fallback slot later.
 - Generic websites: reads visible semantic text from dialogs, live regions, article/main text, headings, buttons, and labels.
-- If the companion is unavailable or stale, **Auto (Recommended)** falls back to OCR.
+- Multiple visible browser windows/tabs are tracked independently and matched to the selected browser window by title.
+- If the companion is unavailable, stale, hidden, or does not match the selected target, **Auto (Recommended)** falls back immediately to another source.
 
-No browsing history is uploaded. The extension sends only the current visible page title/URL metadata and the visible text regions to `127.0.0.1:47852` on the same PC.
+No browsing history is uploaded. The extension sends only the current visible page title/URL metadata and visible text regions to `127.0.0.1:47852` on the same PC. The desktop bridge uses a loopback-only TCP listener, so it does not require a Windows HTTP URL reservation or administrator privileges.
 
 ## Install for development
 
