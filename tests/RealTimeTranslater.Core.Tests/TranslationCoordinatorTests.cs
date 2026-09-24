@@ -316,6 +316,45 @@ public sealed class TranslationCoordinatorTests
     }
 
     [Fact]
+    public async Task StableSpeculationCanBePromotedWithoutSecondProviderCall()
+    {
+        var provider = new CountingProvider();
+        var coordinator = new TranslationCoordinator(provider);
+
+        var regions = new[]
+        {
+            new TextRegion(
+                "A caption without punctuation",
+                new PixelRect(0, 0, 300, 30))
+        };
+
+        var speculative = await coordinator.TranslateAsync(
+            regions,
+            "en",
+            "ko",
+            CancellationToken.None,
+            transient: true);
+
+        coordinator.CommitTransient(
+            speculative,
+            new[] { "en" },
+            "ko");
+
+        var final = await coordinator.TranslateAsync(
+            regions,
+            "en",
+            "ko",
+            CancellationToken.None);
+
+        Assert.Equal(
+            1,
+            provider.CallCount);
+        Assert.Equal(
+            speculative[0].TranslatedText,
+            final[0].TranslatedText);
+    }
+
+    [Fact]
     public async Task UsesBatchProviderForMultipleCacheMisses()
     {
         var provider = new BatchCountingProvider();
