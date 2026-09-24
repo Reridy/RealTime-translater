@@ -657,7 +657,6 @@ public sealed class TranslationPipeline : IDisposable
                             await DelayRemaining(
                                 loopStart,
                                 frameInterval,
-                                speculative.IsFinal,
                                 cancellationToken);
                             continue;
                         }
