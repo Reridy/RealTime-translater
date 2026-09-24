@@ -2,11 +2,17 @@
 
 ## Product goal
 
-RealTime Translater is a Windows desktop overlay that makes an untranslated game feel closer to a localized build without modifying or injecting into the game process.
+RealTime Translater is a Windows desktop translation layer that chooses the highest-quality text source available for the selected target without requiring invasive process hooks.
 
 The target experience is:
 
-game window -> detect changed text -> OCR -> stabilize -> context-aware translation -> draw Korean in the same screen location
+target window -> Auto Source Resolver -> structured text or OCR -> speculative/coalesced text stream -> difficulty-routed translation -> target-language overlay
+
+Current source priority is health-driven rather than hard-coded to OCR:
+
+YouTube rendered captions / Browser DOM -> Unity Adapter -> OCR fallback
+
+Only sources that match the selected target window and have fresh data are eligible. The resolver re-evaluates continuously, so a structured source can reconnect and be promoted without restarting translation.
 
 The MVP deliberately stays outside the game process. This reduces compatibility and anti-cheat risk compared with memory hooks or DLL injection, while still working with many visual novels, RPGs, strategy games, and menu-heavy games.
 
@@ -42,7 +48,22 @@ If the normalized average difference is below the configured threshold, the pipe
 
 After a changed frame is seen, the pipeline intentionally forces enough additional OCR passes to satisfy stabilization. This prevents a common bug where the first changed frame is OCRed once but an identical second frame is skipped before the stabilizer can confirm it.
 
-### 4. OCR
+### 4. Auto Source Resolver
+
+AutoSourceResolver evaluates the selected process/window plus fresh source snapshots on every pipeline loop. Manual source modes remain available, but Auto is the default.
+
+- Unity Adapter snapshots are preferred for Unity targets when fresh.
+- Browser Companion snapshots are considered only for supported browser processes and are matched to the selected browser-window title.
+- YouTube rendered captions receive the highest browser score because they are already the intended subtitle text.
+- OCR is the universal fallback when no matching structured source is healthy.
+
+The browser bridge listens only on 127.0.0.1:47852 using a small raw TCP HTTP endpoint, so it does not require Windows URL ACL/admin setup.
+
+### 5. Browser Companion
+
+The Manifest V3 companion extension sends only current visible structured text and page metadata to the local desktop receiver. YouTube caption segments are coalesced into a single translation unit; generic pages expose visible semantic DOM regions. Hidden/stale tabs are dropped and multiple browser windows are title-matched to the selected target.
+
+### 6. OCR
 
 TesseractOcrService uses Tesseract 5 and returns line-level TextRegion objects containing recognized text, pixel bounding box, and confidence.
 
@@ -50,7 +71,7 @@ The default language set is jpn+eng.
 
 Tesseract is the MVP backend because it is local, deterministic, widely available, and returns bounding boxes. The OCR boundary is kept small so a future backend can use PaddleOCR, Windows OCR, or a GPU text detector.
 
-### 5. OCR stabilization
+### 7. OCR stabilization
 
 FrameTextStabilizer waits until the normalized recognized text repeats across a configurable number of OCR frames.
 
@@ -58,9 +79,13 @@ This addresses transient OCR errors such as a small glyph changing between conse
 
 Future versions should use per-region temporal matching and edit-distance tolerance rather than whole-frame exact text equality.
 
-### 6. Translation
+### 8. Translation
 
-TranslationCoordinator provides a provider abstraction, translation cache, short recent-dialogue context, and conversion from TextRegion to TranslatedRegion.
+TranslationCoordinator provides a provider abstraction, persistent per-game cache, short recent-dialogue context, automatic difficulty routing, metrics, and conversion from TextRegion to TranslatedRegion.
+
+TranslationDifficultyRouter classifies each cache miss as Fast, Standard, or Quality. Short/simple strings receive smaller model budgets. Difficult strings receive larger budgets, and a failed Fast result escalates to Standard/Quality recovery automatically.
+
+SpeculativeTranslationPolicy handles typewriter/progressive text. It debounces incomplete fragments, requires meaningful prefix growth before another request, cancels stale in-flight work, and lets punctuation-complete text bypass the debounce.
 
 Providers currently implemented:
 
@@ -70,7 +95,7 @@ Providers currently implemented:
 
 The provider interface makes DeepL, Google Cloud Translation, Azure Translator, OpenAI-compatible endpoints, or custom local models straightforward additions.
 
-### 7. Overlay
+### 9. Overlay
 
 OverlayWindow is a borderless transparent WPF window.
 
@@ -82,7 +107,7 @@ Subtitle mode combines current translations into a bottom-center subtitle panel.
 
 The overlay uses the target window DPI to map capture pixels to WPF device-independent units.
 
-### 8. Feedback-loop prevention
+### 10. Feedback-loop prevention
 
 An overlay can accidentally be captured by a desktop screen grab, causing OCR to read its own Korean translation.
 
@@ -94,14 +119,15 @@ If WGC is unavailable and the app falls back to GDI CopyFromScreen, screenshot-v
 
 ## Data flow
 
-1. User selects a game window.
-2. CaptureFrame contains a Bitmap, absolute client-area screen bounds, and DPI scale.
-3. FrameChangeDetector decides whether OCR is needed.
-4. TesseractOcrService returns TextRegion lines.
-5. FrameTextStabilizer waits for stable text.
-6. TranslationCoordinator checks cache, supplies context, and calls a provider.
-7. OverlayWindow renders TranslatedRegion values.
-8. The loop repeats at the configured capture FPS.
+1. User selects a target window.
+2. Structured receivers (Unity/Browser) run locally while CaptureFrame tracks the selected HWND.
+3. AutoSourceResolver chooses the healthiest matching source.
+4. Structured text bypasses OCR; otherwise frame-change detection and OCR run.
+5. SpeculativeTranslationPolicy coalesces progressive/typewriter text.
+6. TranslationCoordinator checks per-game memory, routes by difficulty, batches where useful, and calls the provider only on misses.
+7. Quality/context guards reject leaked context or wrong-target-script output and trigger recovery.
+8. OverlayWindow renders TranslatedRegion values.
+9. The resolver and loop continuously re-evaluate source health.
 
 ## Threading
 
