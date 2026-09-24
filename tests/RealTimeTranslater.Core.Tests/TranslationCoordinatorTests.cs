@@ -227,6 +227,95 @@ public sealed class TranslationCoordinatorTests
     }
 
     [Fact]
+    public async Task SpeculativeTranslationDoesNotPersistOrEnterContext()
+    {
+        var provider = new CountingProvider();
+        var coordinator = new TranslationCoordinator(
+            provider,
+            contextLimit: 4);
+
+        var regions = new[]
+        {
+            new TextRegion(
+                "I wanted to show you",
+                new PixelRect(0, 0, 200, 30))
+        };
+
+        await coordinator.TranslateAsync(
+            regions,
+            "en",
+            "ko",
+            CancellationToken.None,
+            transient: true);
+
+        await coordinator.TranslateAsync(
+            regions,
+            "en",
+            "ko",
+            CancellationToken.None,
+            transient: true);
+
+        Assert.Equal(
+            2,
+            provider.CallCount);
+
+        await coordinator.TranslateAsync(
+            new[]
+            {
+                new TextRegion(
+                    "final sentence",
+                    new PixelRect(0, 0, 200, 30))
+            },
+            "en",
+            "ko",
+            CancellationToken.None);
+
+        Assert.DoesNotContain(
+            provider.LastContext,
+            item => item.Contains(
+                "I wanted to show you",
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FinalTranslationAfterSpeculationIsCached()
+    {
+        var provider = new CountingProvider();
+        var coordinator = new TranslationCoordinator(provider);
+
+        var regions = new[]
+        {
+            new TextRegion(
+                "We are strong.",
+                new PixelRect(0, 0, 200, 30))
+        };
+
+        await coordinator.TranslateAsync(
+            regions,
+            "en",
+            "ko",
+            CancellationToken.None,
+            transient: true);
+
+        await coordinator.TranslateAsync(
+            regions,
+            "en",
+            "ko",
+            CancellationToken.None,
+            transient: false);
+
+        await coordinator.TranslateAsync(
+            regions,
+            "en",
+            "ko",
+            CancellationToken.None);
+
+        Assert.Equal(
+            2,
+            provider.CallCount);
+    }
+
+    [Fact]
     public async Task UsesBatchProviderForMultipleCacheMisses()
     {
         var provider = new BatchCountingProvider();
