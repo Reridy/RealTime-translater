@@ -732,6 +732,184 @@ public sealed class TranslationPipeline : IDisposable
         _capture.Dispose();
     }
 
+    private async Task<bool> HandleBrowserSnapshotAsync(
+        BrowserCompanionSnapshot snapshot,
+        CaptureFrame frame,
+        string sourceLabel,
+        long loopStart,
+        TimeSpan frameInterval,
+        CancellationToken cancellationToken)
+    {
+        var regions =
+            BrowserCompanionRegionMapper.Map(
+                snapshot,
+                frame);
+
+        if (regions.Count == 0)
+            return false;
+
+        _lastVisibleSourceTexts =
+            regions
+                .Select(region =>
+                    region.Text)
+                .Where(text =>
+                    !string.IsNullOrWhiteSpace(text))
+                .Distinct(
+                    StringComparer.Ordinal)
+                .ToArray();
+
+        var textKey =
+            "browser:" +
+            BuildTextKey(
+                regions);
+
+        var currentSourceText =
+            string.Join(
+                "\n",
+                regions.Select(region =>
+                    region.Text.Trim()));
+
+        var now =
+            DateTimeOffset.UtcNow;
+
+        if (!string.Equals(
+                textKey,
+                _pendingUnityTextKey,
+                StringComparison.Ordinal))
+        {
+            _pendingUnityTextKey =
+                textKey;
+            _pendingUnityTextSince =
+                now;
+
+            if (_unityTranslationTask is not null &&
+                !string.Equals(
+                    _unityTranslationTaskKey,
+                    textKey,
+                    StringComparison.Ordinal))
+            {
+                CancelUnityTranslation();
+            }
+        }
+
+        await HarvestUnityTranslationAsync(
+            textKey,
+            regions);
+
+        var markedPartial =
+            snapshot.Regions.Any(region =>
+                region.Partial);
+
+        var speculative =
+            SpeculativeTranslationPolicy
+                .Evaluate(
+                    _lastSpeculativeStartedText,
+                    currentSourceText,
+                    now -
+                    _pendingUnityTextSince,
+                    markedPartial);
+
+        var retryCoolingDown =
+            string.Equals(
+                textKey,
+                _failedUnityTextKey,
+                StringComparison.Ordinal) &&
+            now <
+                _nextUnityTranslationRetryAt;
+
+        var needsTranslation =
+            !string.Equals(
+                textKey,
+                _lastUnityTextKey,
+                StringComparison.Ordinal) ||
+            _lastUnityTranslations.Count !=
+                regions.Count;
+
+        if (needsTranslation &&
+            _unityTranslationTask is null &&
+            !retryCoolingDown &&
+            speculative.ShouldTranslate)
+        {
+            _lastSpeculativeStartedText =
+                currentSourceText;
+
+            var browserContext =
+                _baseTranslationContext
+                    .Concat(
+                        new[]
+                        {
+                            $"Browser page: {snapshot.Title}",
+                            $"Browser URL: {snapshot.Url}"
+                        })
+                    .ToArray();
+
+            StartUnityTranslation(
+                textKey,
+                regions,
+                browserContext,
+                cancellationToken);
+        }
+
+        var exactTranslation =
+            string.Equals(
+                _lastUnityTextKey,
+                textKey,
+                StringComparison.Ordinal);
+
+        var reuseSpeculative =
+            !exactTranslation &&
+            _lastUnityTranslations.Count ==
+                regions.Count &&
+            _lastSpeculativeStartedText.Length > 0 &&
+            currentSourceText.StartsWith(
+                _lastSpeculativeStartedText,
+                StringComparison.Ordinal);
+
+        var visibleTranslations =
+            exactTranslation ||
+            reuseSpeculative
+                ? RemapTranslations(
+                    _lastUnityTranslations,
+                    regions)
+                : Array.Empty<TranslatedRegion>();
+
+        await RenderUnityAsync(
+            visibleTranslations,
+            frame);
+
+        var state =
+            BuildUnityStatusState(
+                textKey,
+                retryCoolingDown);
+
+        if (needsTranslation &&
+            _unityTranslationTask is null &&
+            !retryCoolingDown &&
+            !speculative.ShouldTranslate)
+        {
+            state +=
+                " · coalescing partial text";
+        }
+
+        var metrics =
+            _translator.LastMetrics;
+
+        var metricText =
+            metrics.RegionCount > 0
+                ? $" · route {metrics.RouteLabel} · cache {metrics.CacheHits}/{metrics.RegionCount}"
+                : string.Empty;
+
+        StatusChanged?.Invoke(
+            $"Running · {_capture.BackendName} · {sourceLabel} · {regions.Count} text region(s){state}{metricText}");
+
+        await DelayRemaining(
+            loopStart,
+            frameInterval,
+            cancellationToken);
+
+        return true;
+    }
+
     private void StartUnityTranslation(
         string textKey,
         IReadOnlyList<TextRegion> regions,
@@ -969,6 +1147,35 @@ public sealed class TranslationPipeline : IDisposable
             string.Empty;
         _pendingUnityTextSince =
             DateTimeOffset.MinValue;
+    }
+
+    private static IReadOnlyList<TranslatedRegion>
+        RemapTranslations(
+            IReadOnlyList<TranslatedRegion> translations,
+            IReadOnlyList<TextRegion> regions)
+    {
+        if (translations.Count !=
+            regions.Count)
+        {
+            return Array.Empty<TranslatedRegion>();
+        }
+
+        return translations
+            .Select((translated, index) =>
+                translated with
+                {
+                    Bounds =
+                        regions[index].Bounds,
+                    LayoutBounds =
+                        regions[index].LayoutBounds,
+                    ForegroundArgb =
+                        regions[index].ForegroundArgb,
+                    SourceLineCount =
+                        regions[index].SourceLineCount,
+                    SourceAlignment =
+                        regions[index].SourceAlignment
+                })
+            .ToArray();
     }
 
     private async Task RenderUnityAsync(
