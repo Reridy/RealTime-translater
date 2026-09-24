@@ -153,15 +153,24 @@
   }
 
   function snapshot() {
+    const onYouTube = youtubeHost.test(location.hostname);
     const captions = youtubeCaptions();
+
     const regions =
       captions.length > 0
         ? captions
-        : genericVisibleText();
+        : onYouTube
+          ? []
+          : genericVisibleText();
 
     return {
       protocol: 1,
-      kind: captions.length > 0 ? "youtube-captions" : "dom",
+      kind:
+        captions.length > 0
+          ? "youtube-captions"
+          : onYouTube
+            ? "youtube-no-captions"
+            : "dom",
       url: location.href,
       title: document.title || "",
       visible: document.visibilityState === "visible",
