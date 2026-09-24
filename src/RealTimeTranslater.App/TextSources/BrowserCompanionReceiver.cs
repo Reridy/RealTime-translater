@@ -16,7 +16,8 @@ public sealed class BrowserCompanionReceiver : IDisposable
             PropertyNameCaseInsensitive = true
         };
 
-    private BrowserCompanionSnapshot? _latest;
+    private readonly Dictionary<string, BrowserCompanionSnapshot> _latestByPage =
+        new(StringComparer.Ordinal);
     private HttpListener? _listener;
 
     public async Task RunAsync(
@@ -76,22 +77,97 @@ public sealed class BrowserCompanionReceiver : IDisposable
 
     public bool TryGetLatest(
         TimeSpan maxAge,
+        string targetTitle,
         out BrowserCompanionSnapshot snapshot)
     {
         lock (_gate)
         {
-            if (_latest is not null &&
-                DateTimeOffset.UtcNow -
-                _latest.ReceivedAt <=
-                maxAge)
+            var now =
+                DateTimeOffset.UtcNow;
+
+            var expired =
+                _latestByPage
+                    .Where(pair =>
+                        now -
+                        pair.Value.ReceivedAt >
+                        maxAge)
+                    .Select(pair =>
+                        pair.Key)
+                    .ToArray();
+
+            foreach (var key in expired)
+                _latestByPage.Remove(key);
+
+            var candidates =
+                _latestByPage.Values
+                    .Where(item =>
+                        item.Visible)
+                    .OrderByDescending(item =>
+                        TitleScore(
+                            targetTitle,
+                            item.Title))
+                    .ThenByDescending(item =>
+                        item.ReceivedAt)
+                    .ToArray();
+
+            if (candidates.Length > 0)
             {
-                snapshot = _latest;
+                snapshot =
+                    candidates[0];
                 return true;
             }
         }
 
         snapshot = null!;
         return false;
+    }
+
+    private static int TitleScore(
+        string targetTitle,
+        string browserTitle)
+    {
+        if (string.IsNullOrWhiteSpace(
+                targetTitle) ||
+            string.IsNullOrWhiteSpace(
+                browserTitle))
+        {
+            return 0;
+        }
+
+        var target =
+            targetTitle.Trim();
+        var browser =
+            browserTitle.Trim();
+
+        if (target.Contains(
+                browser,
+                StringComparison.OrdinalIgnoreCase) ||
+            browser.Contains(
+                target,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return 1000 +
+                Math.Min(
+                    target.Length,
+                    browser.Length);
+        }
+
+        var max =
+            Math.Min(
+                target.Length,
+                browser.Length);
+        var prefix = 0;
+
+        while (prefix < max &&
+               char.ToUpperInvariant(
+                   target[prefix]) ==
+               char.ToUpperInvariant(
+                   browser[prefix]))
+        {
+            prefix++;
+        }
+
+        return prefix;
     }
 
     public void Dispose()
@@ -178,9 +254,24 @@ public sealed class BrowserCompanionReceiver : IDisposable
                         .Take(128)
                         .ToList();
 
+                var pageKey =
+                    snapshot.Title +
+                    "\u001f" +
+                    snapshot.Url;
+
                 lock (_gate)
                 {
-                    _latest = snapshot;
+                    if (snapshot.Visible)
+                    {
+                        _latestByPage[
+                            pageKey] =
+                            snapshot;
+                    }
+                    else
+                    {
+                        _latestByPage.Remove(
+                            pageKey);
+                    }
                 }
 
                 response.StatusCode = 204;
