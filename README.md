@@ -10,14 +10,14 @@ Implemented on the feature/mvp-realtime-translation branch:
 
 - Select any visible Windows desktop game/window.
 - Auto Source Resolver continuously promotes the healthiest structured source and falls back automatically: YouTube Captions / Browser DOM, Unity Adapter, then OCR.
-- Browser Companion (Manifest V3) streams rendered YouTube captions and visible semantic DOM text over a localhost-only bridge, avoiding OCR when structured browser text is available.
+- Browser Companion (Manifest V3) streams rendered YouTube captions and visible semantic DOM text through a service-worker-owned localhost bridge, avoiding OCR when structured browser text is available and rejecting normal page-origin bridge posts.
 - Automatic translation difficulty router sends short/simple text through a lower-latency budget and escalates failed or difficult text to Standard/Quality budgets.
-- Partial/speculative translation coalesces typewriter text, cancels stale requests, keeps the previous useful partial subtitle visible, and promotes punctuation-complete text immediately.
+- Partial/speculative translation coalesces typewriter text, cancels stale requests, keeps the previous useful partial subtitle visible, never persists transient partials, and promotes a stable partial into translation memory without a second model call.
 - Capture the selected window with Windows Graphics Capture, with automatic GDI fallback if WGC cannot initialize.
 - Ignore mostly unchanged frames using a lightweight frame-difference detector.
 - OCR text lines with Tesseract 5.
 - Optional read-only Unity/BepInEx text adapter that can feed exact visible TMP_Text / Unity UI strings to the translation pipeline, with automatic OCR fallback.
-- Stabilize OCR over multiple frames before translating.
+- Stabilize OCR over multiple frames before translating; OCR translation itself runs in the background so screen capture/change detection stay responsive while the local model is busy.
 - Cache translations to avoid repeat network/model calls, with persistent per-game translation memory across restarts.
 - Automatically remember OCR, provider, model, target language, overlay mode, and glossary settings per game process.
 - Translate through Ollama, LibreTranslate, or a built-in mock provider.
