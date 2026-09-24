@@ -407,6 +407,7 @@ public sealed class TranslationPipeline : IDisposable
                                             .BuildTranslationContext(
                                                 unitySnapshot))
                                     .ToArray(),
+                                "auto",
                                 speculative.IsFinal,
                                 cancellationToken);
                         }
@@ -679,6 +680,7 @@ public sealed class TranslationPipeline : IDisposable
                                 ocrTextKey,
                                 stableRegions,
                                 _baseTranslationContext,
+                                _sourceLanguage,
                                 speculative.IsFinal,
                                 cancellationToken);
                         }
@@ -967,6 +969,7 @@ public sealed class TranslationPipeline : IDisposable
                 textKey,
                 regions,
                 browserContext,
+                "auto",
                 speculative.IsFinal,
                 cancellationToken);
         }
@@ -1042,6 +1045,7 @@ public sealed class TranslationPipeline : IDisposable
         string textKey,
         IReadOnlyList<TextRegion> regions,
         IReadOnlyList<string> context,
+        string sourceLanguage,
         bool isFinal,
         CancellationToken cancellationToken)
     {
@@ -1060,6 +1064,7 @@ public sealed class TranslationPipeline : IDisposable
                 textKey,
                 regions,
                 context,
+                sourceLanguage,
                 isFinal,
                 _unityTranslationCancellation.Token);
     }
@@ -1069,6 +1074,7 @@ public sealed class TranslationPipeline : IDisposable
             string textKey,
             IReadOnlyList<TextRegion> regions,
             IReadOnlyList<string> context,
+            string sourceLanguage,
             bool isFinal,
             CancellationToken cancellationToken)
     {
@@ -1080,7 +1086,7 @@ public sealed class TranslationPipeline : IDisposable
             var translated =
                 await _translator.TranslateAsync(
                     regions,
-                    "auto",
+                    sourceLanguage,
                     _targetLanguage,
                     cancellationToken,
                     context,
