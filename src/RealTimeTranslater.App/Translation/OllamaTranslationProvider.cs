@@ -90,6 +90,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 sourceLanguage,
                 request.TargetLanguage,
                 request.Context,
+                request.Route,
                 translationBudget.Token);
         }
 
@@ -192,6 +193,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                         item.SourceLanguage,
                         item.Request.TargetLanguage,
                         item.Request.Context,
+                        item.Request.Route,
                         translationBudget.Token);
 
                 return results;
@@ -214,6 +216,9 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                                 .ToArray(),
                             requests[0].TargetLanguage,
                             pending[0].Request.Context,
+                            StrongestRoute(
+                                pending.Select(item =>
+                                    item.Request.Route)),
                             strict: attempt > 0,
                             translationBudget.Token);
 
@@ -290,6 +295,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                             item.SourceLanguage,
                             item.Request.TargetLanguage,
                             item.Request.Context,
+                            item.Request.Route,
                             translationBudget.Token);
                 }
 
@@ -327,6 +333,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         string sourceLanguage,
         string targetLanguage,
         IReadOnlyList<string> context,
+        TranslationRoute route,
         CancellationToken cancellationToken)
     {
         Exception? lastError = null;
@@ -341,6 +348,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                         sourceLanguage,
                         targetLanguage,
                         context,
+                        route,
                         strict: attempt > 0,
                         cancellationToken);
 
@@ -414,6 +422,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     sourceLanguage,
                     targetLanguage,
                     context,
+                    route,
                     cancellationToken);
 
             repaired =
@@ -505,6 +514,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     speakerContext,
                     glossaryContext,
                     recentDialogueContext,
+                    request.Route,
                     structuredOutput: true,
                     strict: false,
                     cancellationToken);
@@ -555,6 +565,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     speakerContext: string.Empty,
                     glossaryContext: glossaryContext,
                     recentDialogueContext: string.Empty,
+                    route: request.Route,
                     structuredOutput: false,
                     strict: true,
                     cancellationToken);
@@ -624,6 +635,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         IReadOnlyList<(string Text, string SourceLanguage)> items,
         string targetLanguage,
         IReadOnlyList<string> context,
+        TranslationRoute route,
         bool strict,
         CancellationToken cancellationToken)
     {
@@ -725,11 +737,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             options = new
             {
                 temperature = 0.0,
-                num_ctx = BatchContextBudget,
+                num_ctx = BatchContextBudgetFor(route),
                 num_predict = Math.Clamp(
                     (int)Math.Ceiling(totalSourceLength * 1.25) + 40,
                     72,
-                    BatchOutputBudget),
+                    BatchOutputBudgetFor(route)),
                 repeat_penalty =
                     strict ? 1.12 : 1.08
             },
@@ -783,6 +795,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         string sourceLanguage,
         string targetLanguage,
         IReadOnlyList<string> context,
+        TranslationRoute route,
         CancellationToken cancellationToken)
     {
         var sourceName =
@@ -820,11 +833,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             options = new
             {
                 temperature = 0.0,
-                num_ctx = RepairContextBudget,
+                num_ctx = RepairContextBudgetFor(route),
                 num_predict =
                     TranslateGemmaOutputBudget(
                         sourceText,
-                        RepairOutputBudget),
+                        RepairOutputBudgetFor(route)),
                 repeat_penalty = 1.14
             },
             messages = new object[]
@@ -862,6 +875,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         string sourceLanguage,
         string targetLanguage,
         IReadOnlyList<string> context,
+        TranslationRoute route,
         bool strict,
         CancellationToken cancellationToken)
     {
@@ -897,9 +911,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 : $" {speakerContext}.";
 
         var recentDialogueContext =
-            BuildRecentDialogueContext(
-                context,
-                sourceText);
+            route == TranslationRoute.Fast
+                ? string.Empty
+                : BuildRecentDialogueContext(
+                    context,
+                    sourceText);
 
         var recentInstruction =
             strict ||
@@ -924,12 +940,14 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 temperature = 0.0,
                 num_ctx =
                     TranslateGemmaContextBudget(
-                        strict),
+                        strict,
+                        route),
                 num_predict =
                     TranslateGemmaOutputBudget(
                         sourceText,
                         TranslateGemmaOutputCap(
-                            strict)),
+                            strict,
+                            route)),
                 repeat_penalty =
                     strict ? 1.12 : 1.08
             },
@@ -955,6 +973,7 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
         string speakerContext,
         string glossaryContext,
         string recentDialogueContext,
+        TranslationRoute route,
         bool structuredOutput,
         bool strict,
         CancellationToken cancellationToken)
@@ -1055,11 +1074,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 {
                     temperature = 0.0,
                     top_p = 0.85,
-                    num_ctx = GeneralStructuredContextBudget,
+                    num_ctx = GeneralStructuredContextBudgetFor(route),
                     num_predict =
                         OutputBudget(
                             sourceText,
-                            GeneralStructuredOutputBudget),
+                            GeneralStructuredOutputBudgetFor(route)),
                     repeat_penalty = 1.10
                 },
                 messages = new object[]
@@ -1088,11 +1107,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 {
                     temperature = 0.0,
                     top_p = 0.8,
-                    num_ctx = GeneralStrictContextBudget,
+                    num_ctx = GeneralStrictContextBudgetFor(route),
                     num_predict =
                         OutputBudget(
                             sourceText,
-                            GeneralStrictOutputBudget),
+                            GeneralStrictOutputBudgetFor(route)),
                     repeat_penalty = 1.14
                 },
                 messages = new object[]
@@ -1579,87 +1598,180 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             _ => TimeSpan.FromSeconds(20)
         };
 
-    private int BatchContextBudget
-        => _mode switch
-        {
-            "Fast" => 768,
-            "Quality" => 1536,
-            _ => 1024
-        };
+    private int BatchContextBudgetFor(
+        TranslationRoute route)
+        => ApplyRouteBudget(
+            _mode switch
+            {
+                "Fast" => 768,
+                "Quality" => 1536,
+                _ => 1024
+            },
+            route,
+            minimum: 384,
+            maximum: 1792);
 
-    private int BatchOutputBudget
-        => _mode switch
-        {
-            "Fast" => 256,
-            "Quality" => 512,
-            _ => 384
-        };
+    private int BatchOutputBudgetFor(
+        TranslationRoute route)
+        => ApplyRouteBudget(
+            _mode switch
+            {
+                "Fast" => 256,
+                "Quality" => 512,
+                _ => 384
+            },
+            route,
+            minimum: 128,
+            maximum: 576);
 
-    private int RepairContextBudget
-        => _mode switch
-        {
-            "Fast" => 512,
-            "Quality" => 896,
-            _ => 640
-        };
+    private int RepairContextBudgetFor(
+        TranslationRoute route)
+        => ApplyRouteBudget(
+            _mode switch
+            {
+                "Fast" => 512,
+                "Quality" => 896,
+                _ => 640
+            },
+            route,
+            minimum: 384,
+            maximum: 1024);
 
-    private int RepairOutputBudget
-        => _mode switch
-        {
-            "Fast" => 128,
-            "Quality" => 224,
-            _ => 160
-        };
+    private int RepairOutputBudgetFor(
+        TranslationRoute route)
+        => ApplyRouteBudget(
+            _mode switch
+            {
+                "Fast" => 128,
+                "Quality" => 224,
+                _ => 160
+            },
+            route,
+            minimum: 96,
+            maximum: 256);
 
     private int TranslateGemmaContextBudget(
-        bool strict)
-        => _mode switch
-        {
-            "Fast" => strict ? 512 : 384,
-            "Quality" => strict ? 896 : 768,
-            _ => strict ? 640 : 512
-        };
+        bool strict,
+        TranslationRoute route)
+    {
+        var baseBudget =
+            _mode switch
+            {
+                "Fast" => strict ? 512 : 384,
+                "Quality" => strict ? 896 : 768,
+                _ => strict ? 640 : 512
+            };
+
+        return ApplyRouteBudget(
+            baseBudget,
+            route,
+            minimum:
+                strict
+                    ? 320
+                    : 256,
+            maximum: 1024);
+    }
 
     private int TranslateGemmaOutputCap(
-        bool strict)
-        => _mode switch
-        {
-            "Fast" => strict ? 128 : 96,
-            "Quality" => strict ? 224 : 192,
-            _ => strict ? 160 : 128
-        };
+        bool strict,
+        TranslationRoute route)
+    {
+        var baseBudget =
+            _mode switch
+            {
+                "Fast" => strict ? 128 : 96,
+                "Quality" => strict ? 224 : 192,
+                _ => strict ? 160 : 128
+            };
 
-    private int GeneralStructuredContextBudget
-        => _mode switch
-        {
-            "Fast" => 768,
-            "Quality" => 1536,
-            _ => 1024
-        };
+        return ApplyRouteBudget(
+            baseBudget,
+            route,
+            minimum:
+                strict
+                    ? 72
+                    : 56,
+            maximum: 256);
+    }
 
-    private int GeneralStructuredOutputBudget
-        => _mode switch
-        {
-            "Fast" => 160,
-            "Quality" => 320,
-            _ => 224
-        };
+    private int GeneralStructuredContextBudgetFor(
+        TranslationRoute route)
+        => ApplyRouteBudget(
+            _mode switch
+            {
+                "Fast" => 768,
+                "Quality" => 1536,
+                _ => 1024
+            },
+            route,
+            minimum: 384,
+            maximum: 1792);
 
-    private int GeneralStrictContextBudget
-        => _mode switch
-        {
-            "Fast" => 512,
-            "Quality" => 1024,
-            _ => 768
-        };
+    private int GeneralStructuredOutputBudgetFor(
+        TranslationRoute route)
+        => ApplyRouteBudget(
+            _mode switch
+            {
+                "Fast" => 160,
+                "Quality" => 320,
+                _ => 224
+            },
+            route,
+            minimum: 96,
+            maximum: 384);
 
-    private int GeneralStrictOutputBudget
-        => _mode switch
-        {
-            "Fast" => 128,
-            "Quality" => 256,
-            _ => 176
-        };
+    private int GeneralStrictContextBudgetFor(
+        TranslationRoute route)
+        => ApplyRouteBudget(
+            _mode switch
+            {
+                "Fast" => 512,
+                "Quality" => 1024,
+                _ => 768
+            },
+            route,
+            minimum: 320,
+            maximum: 1152);
+
+    private int GeneralStrictOutputBudgetFor(
+        TranslationRoute route)
+        => ApplyRouteBudget(
+            _mode switch
+            {
+                "Fast" => 128,
+                "Quality" => 256,
+                _ => 176
+            },
+            route,
+            minimum: 80,
+            maximum: 320);
+
+    private static int ApplyRouteBudget(
+        int value,
+        TranslationRoute route,
+        int minimum,
+        int maximum)
+    {
+        var multiplier =
+            route switch
+            {
+                TranslationRoute.Fast => 0.68,
+                TranslationRoute.Quality => 1.22,
+                _ => 1.0
+            };
+
+        return Math.Clamp(
+            (int)Math.Round(
+                value * multiplier),
+            minimum,
+            maximum);
+    }
+
+    private static TranslationRoute StrongestRoute(
+        IEnumerable<TranslationRoute> routes)
+        => routes.DefaultIfEmpty(
+                TranslationRoute.Standard)
+            .Max();
 
     private static string NormalizeMode(
         string? mode)
