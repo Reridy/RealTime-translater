@@ -624,7 +624,20 @@ public sealed class TranslationPipeline : IDisposable
                                 ocrTextKey;
                             _pendingUnityTextSince =
                                 now;
+
+                            if (_unityTranslationTask is not null &&
+                                !string.Equals(
+                                    _unityTranslationTaskKey,
+                                    ocrTextKey,
+                                    StringComparison.Ordinal))
+                            {
+                                CancelUnityTranslation();
+                            }
                         }
+
+                        await HarvestUnityTranslationAsync(
+                            ocrTextKey,
+                            stableRegions);
 
                         var speculative =
                             SpeculativeTranslationPolicy
@@ -638,104 +651,112 @@ public sealed class TranslationPipeline : IDisposable
                                             LooksCompleteForImmediateTranslation(
                                                 region.Text)));
 
-                        if (!speculative.ShouldTranslate)
+                        var retryCoolingDown =
+                            string.Equals(
+                                ocrTextKey,
+                                _failedUnityTextKey,
+                                StringComparison.Ordinal) &&
+                            now <
+                                _nextUnityTranslationRetryAt;
+
+                        var needsTranslation =
+                            !string.Equals(
+                                ocrTextKey,
+                                _lastUnityTextKey,
+                                StringComparison.Ordinal) ||
+                            _lastUnityTranslations.Count !=
+                                stableRegions.Count;
+
+                        if (needsTranslation &&
+                            _unityTranslationTask is null &&
+                            !retryCoolingDown &&
+                            speculative.ShouldTranslate)
                         {
-                            var coalescingSource =
-                                _textSourceMode.Equals(
-                                    "Auto (Recommended)",
-                                    StringComparison.OrdinalIgnoreCase)
-                                    ? "Auto→OCR"
+                            _lastSpeculativeStartedText =
+                                ocrSourceText;
+
+                            StartUnityTranslation(
+                                ocrTextKey,
+                                stableRegions,
+                                _baseTranslationContext,
+                                speculative.IsFinal,
+                                cancellationToken);
+                        }
+
+                        var exactTranslation =
+                            string.Equals(
+                                _lastUnityTextKey,
+                                ocrTextKey,
+                                StringComparison.Ordinal);
+
+                        var reuseSpeculative =
+                            !exactTranslation &&
+                            _lastUnityTranslations.Count ==
+                                stableRegions.Count &&
+                            _lastSpeculativeStartedText.Length > 0 &&
+                            ocrSourceText.StartsWith(
+                                _lastSpeculativeStartedText,
+                                StringComparison.Ordinal);
+
+                        var visibleTranslations =
+                            exactTranslation ||
+                            reuseSpeculative
+                                ? RemapTranslations(
+                                    _lastUnityTranslations,
+                                    stableRegions)
+                                : Array.Empty<TranslatedRegion>();
+
+                        _lastVisibleTranslations =
+                            visibleTranslations.ToArray();
+
+                        var styled =
+                            PrepareOverlayRegions(
+                                visibleTranslations,
+                                frame);
+
+                        await _overlay.Dispatcher.InvokeAsync(() =>
+                            _overlay.Render(
+                                styled,
+                                frame.ScreenBounds,
+                                frame.DpiScale));
+
+                        var fallbackNote =
+                            _capture.FallbackReason is null
+                                ? string.Empty
+                                : " · WGC unavailable, using GDI";
+
+                        var sourceNote =
+                            _textSourceMode.Equals(
+                                "Auto (Recommended)",
+                                StringComparison.OrdinalIgnoreCase)
+                                ? " · Auto→OCR"
+                                : adapterSemanticOcrFallback
+                                    ? " · Unity Adapter→OCR"
                                     : _textSourceMode.Contains(
                                             "fallback",
                                             StringComparison.OrdinalIgnoreCase)
-                                        ? "OCR fallback"
-                                        : "OCR";
+                                        ? " · OCR fallback"
+                                        : string.Empty;
 
-                            StatusChanged?.Invoke(
-                                $"Running · {_capture.BackendName} · {coalescingSource} · coalescing partial text ({stableRegions.Count} line(s))");
+                        var state =
+                            BuildUnityStatusState(
+                                ocrTextKey,
+                                retryCoolingDown);
 
-                            await DelayRemaining(
-                                loopStart,
-                                frameInterval,
-                                cancellationToken);
-                            continue;
-                        }
-
-                        _lastSpeculativeStartedText =
-                            ocrSourceText;
-
-                        try
+                        if (needsTranslation &&
+                            _unityTranslationTask is null &&
+                            !retryCoolingDown &&
+                            !speculative.ShouldTranslate)
                         {
-                            var translated =
-                                await _translator.TranslateAsync(
-                                    stableRegions,
-                                    _sourceLanguage,
-                                    _targetLanguage,
-                                    cancellationToken,
-                                    _baseTranslationContext,
-                                    transient:
-                                        !speculative.IsFinal);
-
-                            _lastVisibleTranslations =
-                                translated.ToArray();
-
-                            var styled =
-                                PrepareOverlayRegions(
-                                    translated,
-                                    frame);
-
-                            await _overlay.Dispatcher.InvokeAsync(() =>
-                                _overlay.Render(
-                                    styled,
-                                    frame.ScreenBounds,
-                                    frame.DpiScale));
-
-                            var fallbackNote =
-                                _capture.FallbackReason is null
-                                    ? string.Empty
-                                    : " · WGC unavailable, using GDI";
-
-                            var sourceNote =
-                                _textSourceMode.Equals(
-                                    "Auto (Recommended)",
-                                    StringComparison.OrdinalIgnoreCase)
-                                    ? " · Auto→OCR"
-                                    : adapterSemanticOcrFallback
-                                        ? " · Unity Adapter→OCR"
-                                        : _textSourceMode.Contains(
-                                                "fallback",
-                                                StringComparison.OrdinalIgnoreCase)
-                                            ? " · OCR fallback"
-                                            : string.Empty;
-
-                            var metrics =
-                                _translator.LastMetrics;
-
-                            StatusChanged?.Invoke(
-                                $"Running · {_capture.BackendName}{fallbackNote}{sourceNote} · OCR {stableRegions.Count} line(s) · overlay {translated.Count} line(s) · route {metrics.RouteLabel} · cache {metrics.CacheHits}/{metrics.RegionCount} · calls {metrics.ProviderCalls}");
+                            state +=
+                                " · coalescing partial text";
                         }
-                        catch (OperationCanceledException)
-                            when (cancellationToken
-                                .IsCancellationRequested)
-                        {
-                            throw;
-                        }
-                        catch (Exception ex)
-                        {
-                            forcedOcrFrames =
-                                Math.Max(
-                                    forcedOcrFrames,
-                                    _settings.StabilityFrames);
 
-                            await _overlay.Dispatcher.InvokeAsync(() =>
-                                _overlay.Render(
-                                    Array.Empty<TranslatedRegion>(),
-                                    frame.ScreenBounds,
-                                    frame.DpiScale));
+                        var metrics =
+                            _translator.LastMetrics;
 
-                            StatusChanged?.Invoke(
-                                $"Running · {_capture.BackendName} · OCR translation error, retrying: {SummarizeError(ex)}");
-                        }
+                        StatusChanged?.Invoke(
+                            $"Running · {_capture.BackendName}{fallbackNote}{sourceNote} · OCR {stableRegions.Count} line(s){state} · route {metrics.RouteLabel} · cache {metrics.CacheHits}/{metrics.RegionCount} · calls {metrics.ProviderCalls}");
                     }
                     else
                     {
