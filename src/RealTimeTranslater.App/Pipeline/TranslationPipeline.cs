@@ -211,13 +211,70 @@ public sealed class TranslationPipeline : IDisposable
                     continue;
                 }
 
+                BrowserCompanionSnapshot? browserSnapshot =
+                    null;
+
+                if (useBrowserCompanion &&
+                    _browserCompanionReceiver.TryGetLatest(
+                        TimeSpan.FromSeconds(2),
+                        out var freshBrowserSnapshot))
+                {
+                    browserSnapshot =
+                        freshBrowserSnapshot;
+                }
+
+                UnityAdapterSnapshot? unitySnapshot =
+                    null;
+
                 if (useUnityAdapter &&
                     _unityAdapterReceiver.TryGetLatest(
                         TimeSpan.FromSeconds(2),
-                        out var unitySnapshot))
+                        out var freshUnitySnapshot))
                 {
+                    unitySnapshot =
+                        freshUnitySnapshot;
+
                     _lastUnityAdapterSeenAt =
                         DateTimeOffset.UtcNow;
+                }
+
+                var sourceDecision =
+                    _autoSourceResolver.Resolve(
+                        _textSourceMode,
+                        _targetProcessName,
+                        _targetTitle,
+                        unitySnapshot is not null,
+                        browserSnapshot);
+
+                if (_lastResolvedSource !=
+                    sourceDecision.Kind)
+                {
+                    CancelUnityTranslation();
+                    ResetUnityTextState();
+                    _lastSpeculativeStartedText =
+                        string.Empty;
+                    _lastResolvedSource =
+                        sourceDecision.Kind;
+                }
+
+                if (sourceDecision.Kind ==
+                        AutoSourceKind.Browser &&
+                    browserSnapshot is not null &&
+                    await HandleBrowserSnapshotAsync(
+                        browserSnapshot,
+                        frame,
+                        sourceDecision.Label,
+                        loopStart,
+                        frameInterval,
+                        cancellationToken))
+                {
+                    continue;
+                }
+
+                if (sourceDecision.Kind ==
+                        AutoSourceKind.Unity &&
+                    unitySnapshot is not null)
+                {
 
                     var selectedUnityRegions =
                         UnityAdapterTextSelector.Select(
