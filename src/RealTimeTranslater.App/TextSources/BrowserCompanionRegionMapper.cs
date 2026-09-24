@@ -38,10 +38,55 @@ internal static class BrowserCompanionRegionMapper
                 outerHeight -
                 snapshot.InnerHeight);
 
-        return snapshot.Regions
-            .Where(region =>
-                !string.IsNullOrWhiteSpace(
-                    region.Text))
+        var sourceRegions =
+            snapshot.Regions
+                .Where(region =>
+                    !string.IsNullOrWhiteSpace(
+                        region.Text))
+                .ToArray();
+
+        if (string.Equals(
+                snapshot.Kind,
+                "youtube-captions",
+                StringComparison.OrdinalIgnoreCase) &&
+            sourceRegions.Length > 1)
+        {
+            var ordered =
+                sourceRegions
+                    .OrderBy(region => region.Y)
+                    .ThenBy(region => region.X)
+                    .ToArray();
+
+            sourceRegions =
+                new[]
+                {
+                    new BrowserCompanionRegion
+                    {
+                        Text = string.Join(
+                            " ",
+                            ordered
+                                .Select(region =>
+                                    region.Text.Trim())
+                                .Where(text =>
+                                    text.Length > 0)),
+                        Role = "caption",
+                        X = ordered.Min(region => region.X),
+                        Y = ordered.Min(region => region.Y),
+                        Width =
+                            ordered.Max(region =>
+                                region.X + region.Width) -
+                            ordered.Min(region => region.X),
+                        Height =
+                            ordered.Max(region =>
+                                region.Y + region.Height) -
+                            ordered.Min(region => region.Y),
+                        Partial = ordered.Any(region =>
+                            region.Partial)
+                    }
+                };
+        }
+
+        return sourceRegions
             .Select(region =>
             {
                 var x =
