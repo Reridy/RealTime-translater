@@ -498,9 +498,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 request.Text);
 
         var recentDialogueContext =
-            BuildRecentDialogueContext(
-                request.Context,
-                request.Text);
+            request.Route == TranslationRoute.Fast
+                ? string.Empty
+                : BuildRecentDialogueContext(
+                    request.Context,
+                    request.Text);
 
         Exception? primaryError = null;
 
@@ -661,9 +663,11 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                 context);
 
         var recentDialogueContext =
-            BuildRecentDialogueContext(
-                context,
-                combinedSource);
+            route == TranslationRoute.Fast
+                ? string.Empty
+                : BuildRecentDialogueContext(
+                    context,
+                    combinedSource);
 
         if (!string.IsNullOrWhiteSpace(
                 speakerContext))
