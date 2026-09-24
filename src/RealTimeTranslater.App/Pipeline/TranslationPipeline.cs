@@ -471,8 +471,11 @@ public sealed class TranslationPipeline : IDisposable
                                 " · coalescing partial text";
                         }
 
+                        var metrics =
+                            _translator.LastMetrics;
+
                         StatusChanged?.Invoke(
-                            $"Running · {_capture.BackendName} · Unity Adapter {unityScope} · {unityRegions.Count}/{unitySnapshot.Data.Regions.Count} selected text region(s){state}");
+                            $"Running · {_capture.BackendName} · Unity Adapter {unityScope} · {unityRegions.Count}/{unitySnapshot.Data.Regions.Count} selected text region(s){state} · route {metrics.RouteLabel} · cache {metrics.CacheHits}/{metrics.RegionCount}");
 
                         await DelayRemaining(
                             loopStart,
@@ -611,15 +614,24 @@ public sealed class TranslationPipeline : IDisposable
                                     ? string.Empty
                                     : " · WGC unavailable, using GDI";
 
-                            var adapterNote =
-                                adapterSemanticOcrFallback
-                                    ? " · Unity Adapter semantic OCR fallback"
-                                    : useUnityAdapter
-                                        ? " · Unity Adapter waiting, OCR fallback"
-                                        : string.Empty;
+                            var sourceNote =
+                                _textSourceMode.Equals(
+                                    "Auto (Recommended)",
+                                    StringComparison.OrdinalIgnoreCase)
+                                    ? " · Auto→OCR"
+                                    : adapterSemanticOcrFallback
+                                        ? " · Unity Adapter→OCR"
+                                        : _textSourceMode.Contains(
+                                                "fallback",
+                                                StringComparison.OrdinalIgnoreCase)
+                                            ? " · OCR fallback"
+                                            : string.Empty;
+
+                            var metrics =
+                                _translator.LastMetrics;
 
                             StatusChanged?.Invoke(
-                                $"Running · {_capture.BackendName}{fallbackNote}{adapterNote} · OCR {stableRegions.Count} line(s) · overlay {translated.Count} line(s)");
+                                $"Running · {_capture.BackendName}{fallbackNote}{sourceNote} · OCR {stableRegions.Count} line(s) · overlay {translated.Count} line(s) · route {metrics.RouteLabel} · cache {metrics.CacheHits}/{metrics.RegionCount}");
                         }
                         catch (OperationCanceledException)
                             when (cancellationToken
@@ -646,15 +658,21 @@ public sealed class TranslationPipeline : IDisposable
                     }
                     else
                     {
-                        var adapterNote =
-                            adapterSemanticOcrFallback
-                                ? " · Unity Adapter semantic OCR fallback"
-                                : useUnityAdapter
-                                    ? " · Unity Adapter waiting, OCR fallback"
-                                    : string.Empty;
+                        var sourceNote =
+                            _textSourceMode.Equals(
+                                "Auto (Recommended)",
+                                StringComparison.OrdinalIgnoreCase)
+                                ? " · Auto→OCR"
+                                : adapterSemanticOcrFallback
+                                    ? " · Unity Adapter→OCR"
+                                    : _textSourceMode.Contains(
+                                            "fallback",
+                                            StringComparison.OrdinalIgnoreCase)
+                                        ? " · OCR fallback"
+                                        : string.Empty;
 
                         StatusChanged?.Invoke(
-                            $"Running · {_capture.BackendName}{adapterNote} · stabilizing OCR ({regions.Count} line(s))");
+                            $"Running · {_capture.BackendName}{sourceNote} · stabilizing OCR ({regions.Count} line(s))");
                     }
                 }
 
