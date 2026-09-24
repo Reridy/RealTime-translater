@@ -45,6 +45,7 @@ public sealed class TranslationPipeline : IDisposable
     private int _refreshTranslationRequested;
     private IReadOnlyList<TranslatedRegion> _lastUnityTranslations =
         Array.Empty<TranslatedRegion>();
+    private bool _lastUnityTranslationWasFinal;
     private double? _lastUnityTranslationMilliseconds;
     private string _failedUnityTextKey = string.Empty;
     private DateTimeOffset _nextUnityTranslationRetryAt =
@@ -374,6 +375,11 @@ public sealed class TranslationPipeline : IDisposable
                                             LooksCompleteForImmediateTranslation(
                                                 region.Text)));
 
+                        PromoteSpeculativeIfFinal(
+                            unityTextKey,
+                            "auto",
+                            speculative.IsFinal);
+
                         var retryCoolingDown =
                             string.Equals(
                                 unityTextKey,
@@ -651,6 +657,11 @@ public sealed class TranslationPipeline : IDisposable
                                         !stableRegions.All(region =>
                                             LooksCompleteForImmediateTranslation(
                                                 region.Text)));
+
+                        PromoteSpeculativeIfFinal(
+                            ocrTextKey,
+                            _sourceLanguage,
+                            speculative.IsFinal);
 
                         var retryCoolingDown =
                             string.Equals(
@@ -931,6 +942,11 @@ public sealed class TranslationPipeline : IDisposable
                     _pendingUnityTextSince,
                     markedPartial);
 
+        PromoteSpeculativeIfFinal(
+            textKey,
+            "auto",
+            speculative.IsFinal);
+
         var retryCoolingDown =
             string.Equals(
                 textKey,
@@ -1204,6 +1220,9 @@ public sealed class TranslationPipeline : IDisposable
         _lastVisibleTranslations =
             _lastUnityTranslations.ToArray();
 
+        _lastUnityTranslationWasFinal =
+            attempt.IsFinal;
+
         _lastUnityTextKey =
             currentTextKey;
         _failedUnityTextKey =
@@ -1279,6 +1298,8 @@ public sealed class TranslationPipeline : IDisposable
             string.Empty;
         _lastUnityTranslations =
             Array.Empty<TranslatedRegion>();
+        _lastUnityTranslationWasFinal =
+            false;
         _lastUnityTranslationMilliseconds =
             null;
         _lastUnityTranslationError =
@@ -1291,6 +1312,31 @@ public sealed class TranslationPipeline : IDisposable
             DateTimeOffset.MinValue;
         _lastSpeculativeStartedText =
             string.Empty;
+    }
+
+    private void PromoteSpeculativeIfFinal(
+        string currentTextKey,
+        string sourceLanguage,
+        bool isFinal)
+    {
+        if (!isFinal ||
+            _lastUnityTranslationWasFinal ||
+            _lastUnityTranslations.Count == 0 ||
+            !string.Equals(
+                _lastUnityTextKey,
+                currentTextKey,
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _translator.CommitTransient(
+            _lastUnityTranslations,
+            new[] { sourceLanguage },
+            _targetLanguage);
+
+        _lastUnityTranslationWasFinal =
+            true;
     }
 
     private static IReadOnlyList<TranslatedRegion>
