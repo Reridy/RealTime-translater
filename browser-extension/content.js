@@ -1,11 +1,13 @@
 (() => {
   "use strict";
 
-  const endpoint = "http://127.0.0.1:47852/v1/push";
   const youtubeHost = /(^|\.)youtube\.com$/i;
   let lastKey = "";
   let lastSentAt = 0;
   let timer = 0;
+  let captionKey = "";
+  let captionChangedAt = 0;
+  let captionFinalizeTimer = 0;
 
   function cleanText(value) {
     return String(value || "")
@@ -68,7 +70,7 @@
           segment,
           segment.textContent,
           "caption",
-          true
+          false
         )
       )
       .filter((region) => region && region.text.length > 0);
@@ -85,7 +87,7 @@
           element,
           element.textContent,
           "caption",
-          true
+          false
         )
       )
       .filter((region) => region && region.text.length > 0)
@@ -156,6 +158,31 @@
     const onYouTube = youtubeHost.test(location.hostname);
     const captions = youtubeCaptions();
 
+    if (onYouTube) {
+      const nextCaptionKey = captions
+        .map((region) => region.text)
+        .join("\u001e");
+
+      if (nextCaptionKey !== captionKey) {
+        captionKey = nextCaptionKey;
+        captionChangedAt = Date.now();
+
+        clearTimeout(captionFinalizeTimer);
+        captionFinalizeTimer = setTimeout(
+          () => push(true),
+          420
+        );
+      }
+
+      const partial =
+        captions.length > 0 &&
+        Date.now() - captionChangedAt < 360;
+
+      for (const region of captions) {
+        region.partial = partial;
+      }
+    }
+
     const regions =
       captions.length > 0
         ? captions
@@ -196,7 +223,8 @@
         Math.round(region.x),
         Math.round(region.y),
         Math.round(region.width),
-        Math.round(region.height)
+        Math.round(region.height),
+        region.partial
       ])
     ]);
 
@@ -214,16 +242,12 @@
     lastSentAt = now;
 
     try {
-      await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(data),
-        cache: "no-store"
+      await chrome.runtime.sendMessage({
+        type: "rtt-browser-snapshot",
+        payload: data
       });
     } catch {
-      // Desktop app may not be running. Keep the companion silent.
+      // The extension may have been reloaded or disabled. Stay silent.
     }
   }
 
