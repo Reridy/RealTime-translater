@@ -27,7 +27,15 @@ public sealed class BrowserCompanionReceiver : IDisposable
         listener.Prefixes.Add(
             $"http://127.0.0.1:{Port}/");
 
-        listener.Start();
+        try
+        {
+            listener.Start();
+        }
+        catch (HttpListenerException)
+        {
+            return;
+        }
+
         _listener = listener;
 
         try
