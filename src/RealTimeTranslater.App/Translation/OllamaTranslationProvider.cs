@@ -216,9 +216,14 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                                 .ToArray(),
                             requests[0].TargetLanguage,
                             pending[0].Request.Context,
-                            StrongestRoute(
-                                pending.Select(item =>
-                                    item.Request.Route)),
+                            attempt == 0
+                                ? StrongestRoute(
+                                    pending.Select(item =>
+                                        item.Request.Route))
+                                : EscalateRoute(
+                                    StrongestRoute(
+                                        pending.Select(item =>
+                                            item.Request.Route))),
                             strict: attempt > 0,
                             translationBudget.Token);
 
@@ -348,7 +353,9 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                         sourceLanguage,
                         targetLanguage,
                         context,
-                        route,
+                        attempt == 0
+                            ? route
+                            : EscalateRoute(route),
                         strict: attempt > 0,
                         cancellationToken);
 
@@ -422,7 +429,8 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     sourceLanguage,
                     targetLanguage,
                     context,
-                    route,
+                    EscalateRoute(
+                        EscalateRoute(route)),
                     cancellationToken);
 
             repaired =
@@ -567,7 +575,8 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
                     speakerContext: string.Empty,
                     glossaryContext: glossaryContext,
                     recentDialogueContext: string.Empty,
-                    route: request.Route,
+                    route: EscalateRoute(
+                        request.Route),
                     structuredOutput: false,
                     strict: true,
                     cancellationToken);
@@ -1770,6 +1779,18 @@ public sealed class OllamaTranslationProvider : IBatchTranslationProvider
             minimum,
             maximum);
     }
+
+    private static TranslationRoute EscalateRoute(
+        TranslationRoute route)
+        => route switch
+        {
+            TranslationRoute.Fast =>
+                TranslationRoute.Standard,
+            TranslationRoute.Standard =>
+                TranslationRoute.Quality,
+            _ =>
+                TranslationRoute.Quality
+        };
 
     private static TranslationRoute StrongestRoute(
         IEnumerable<TranslationRoute> routes)
