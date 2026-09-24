@@ -136,6 +136,10 @@ internal sealed class AutoSourceResolver
     {
         if (snapshot is null ||
             !snapshot.Visible ||
+            string.Equals(
+                snapshot.Kind,
+                "youtube-no-captions",
+                StringComparison.OrdinalIgnoreCase) ||
             !IsBrowserProcess(
                 targetProcessName))
         {
