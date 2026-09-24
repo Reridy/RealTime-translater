@@ -639,8 +639,19 @@ public sealed class TranslationPipeline : IDisposable
 
                         if (!speculative.ShouldTranslate)
                         {
+                            var coalescingSource =
+                                _textSourceMode.Equals(
+                                    "Auto (Recommended)",
+                                    StringComparison.OrdinalIgnoreCase)
+                                    ? "Auto→OCR"
+                                    : _textSourceMode.Contains(
+                                            "fallback",
+                                            StringComparison.OrdinalIgnoreCase)
+                                        ? "OCR fallback"
+                                        : "OCR";
+
                             StatusChanged?.Invoke(
-                                $"Running · {_capture.BackendName} · Auto→OCR · coalescing partial text ({stableRegions.Count} line(s))");
+                                $"Running · {_capture.BackendName} · {coalescingSource} · coalescing partial text ({stableRegions.Count} line(s))");
 
                             await DelayRemaining(
                                 loopStart,
