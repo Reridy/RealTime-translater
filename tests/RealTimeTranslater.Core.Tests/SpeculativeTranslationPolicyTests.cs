@@ -20,6 +20,20 @@ public sealed class SpeculativeTranslationPolicyTests
     }
 
     [Fact]
+    public void StructuredStableCaptionIsFinalWithoutPunctuation()
+    {
+        var decision =
+            SpeculativeTranslationPolicy.Evaluate(
+                "A caption without punctuation",
+                "A caption without punctuation",
+                TimeSpan.FromMilliseconds(500),
+                markedPartial: false);
+
+        Assert.False(decision.ShouldTranslate);
+        Assert.True(decision.IsFinal);
+    }
+
+    [Fact]
     public void PartialTextWaitsForDebounce()
     {
         var decision =
