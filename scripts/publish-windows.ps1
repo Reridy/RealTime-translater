@@ -48,8 +48,12 @@ Copy-Item (Join-Path $tessdata "jpn.traineddata") $publishedTessdata -Force
 $publishedDocs = Join-Path $publishDir "docs"
 New-Item -ItemType Directory -Force -Path $publishedDocs | Out-Null
 Copy-Item (Join-Path $repo "docs\UNITY_ADAPTER.md") $publishedDocs -Force
+Copy-Item (Join-Path $repo "docs\BROWSER_COMPANION.md") $publishedDocs -Force
 Copy-Item (Join-Path $PSScriptRoot "setup-recommended-translation-model.ps1") $publishDir -Force
 Copy-Item (Join-Path $PSScriptRoot "build-unity-adapter.ps1") $publishDir -Force
+
+$browserExtension = Join-Path $publishDir "browser-extension"
+Copy-Item (Join-Path $repo "browser-extension") $browserExtension -Recurse -Force
 
 $adapterSource = Join-Path $publishDir "adapter-source\UnityBepInEx"
 New-Item -ItemType Directory -Force -Path $adapterSource | Out-Null
@@ -63,11 +67,13 @@ RealTime Translater - Windows x64
 
 1. Run RealTimeTranslater.App.exe.
 2. For local AI translation, install Ollama and pull translategemma:4b.
-3. For supported Unity games, install the optional BepInEx adapter described in docs/UNITY_ADAPTER.md.
+3. Leave Text source on Auto (Recommended). The app automatically prefers structured sources over OCR.
+4. For supported Unity games, install the optional BepInEx adapter described in docs/UNITY_ADAPTER.md.
    The package includes build-unity-adapter.ps1 and the adapter source. Building
    the adapter currently requires the .NET 8 SDK because it references the
    target game's own Unity/BepInEx assemblies.
-4. User settings and the persistent translation cache are stored under:
+5. For Chrome/Edge/Brave, load the included browser-extension folder as an unpacked extension to enable direct YouTube captions and DOM text. See docs/BROWSER_COMPANION.md.
+6. User settings and the persistent translation cache are stored under:
    %LOCALAPPDATA%\RealTimeTranslater
 
 This package includes English and Japanese Tesseract OCR data.
