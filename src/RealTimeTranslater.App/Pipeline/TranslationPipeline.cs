@@ -482,8 +482,15 @@ public sealed class TranslationPipeline : IDisposable
                         var metrics =
                             _translator.LastMetrics;
 
+                        var sourceAgeMs =
+                            Math.Max(
+                                0,
+                                (DateTimeOffset.UtcNow -
+                                 unitySnapshot.ReceivedAt)
+                                .TotalMilliseconds);
+
                         StatusChanged?.Invoke(
-                            $"Running · {_capture.BackendName} · Unity Adapter {unityScope} · {unityRegions.Count}/{unitySnapshot.Data.Regions.Count} selected text region(s){state} · route {metrics.RouteLabel} · cache {metrics.CacheHits}/{metrics.RegionCount}");
+                            $"Running · {_capture.BackendName} · Unity Adapter {unityScope} · source {sourceAgeMs:0} ms · {unityRegions.Count}/{unitySnapshot.Data.Regions.Count} selected text region(s){state} · route {metrics.RouteLabel} · cache {metrics.CacheHits}/{metrics.RegionCount} · calls {metrics.ProviderCalls}");
 
                         await DelayRemaining(
                             loopStart,
@@ -691,7 +698,7 @@ public sealed class TranslationPipeline : IDisposable
                                 _translator.LastMetrics;
 
                             StatusChanged?.Invoke(
-                                $"Running · {_capture.BackendName}{fallbackNote}{sourceNote} · OCR {stableRegions.Count} line(s) · overlay {translated.Count} line(s) · route {metrics.RouteLabel} · cache {metrics.CacheHits}/{metrics.RegionCount}");
+                                $"Running · {_capture.BackendName}{fallbackNote}{sourceNote} · OCR {stableRegions.Count} line(s) · overlay {translated.Count} line(s) · route {metrics.RouteLabel} · cache {metrics.CacheHits}/{metrics.RegionCount} · calls {metrics.ProviderCalls}");
                         }
                         catch (OperationCanceledException)
                             when (cancellationToken
@@ -972,13 +979,20 @@ public sealed class TranslationPipeline : IDisposable
         var metrics =
             _translator.LastMetrics;
 
+        var sourceAgeMs =
+            Math.Max(
+                0,
+                (DateTimeOffset.UtcNow -
+                 snapshot.ReceivedAt)
+                .TotalMilliseconds);
+
         var metricText =
             metrics.RegionCount > 0
-                ? $" · route {metrics.RouteLabel} · cache {metrics.CacheHits}/{metrics.RegionCount}"
+                ? $" · route {metrics.RouteLabel} · cache {metrics.CacheHits}/{metrics.RegionCount} · calls {metrics.ProviderCalls}"
                 : string.Empty;
 
         StatusChanged?.Invoke(
-            $"Running · {_capture.BackendName} · {sourceLabel} · {regions.Count} text region(s){state}{metricText}");
+            $"Running · {_capture.BackendName} · {sourceLabel} · source {sourceAgeMs:0} ms · {regions.Count} text region(s){state}{metricText}");
 
         await DelayRemaining(
             loopStart,
