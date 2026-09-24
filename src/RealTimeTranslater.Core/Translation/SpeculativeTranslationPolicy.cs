@@ -143,7 +143,7 @@ public static class SpeculativeTranslationPolicy
             Normalize(text)
                 .TrimEnd(
                     '"',
-                    ''',
+                    '\'',
                     '”',
                     '’',
                     ')',
