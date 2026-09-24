@@ -84,13 +84,21 @@ internal sealed class AutoSourceResolver
         var candidates =
             new List<AutoSourceDecision>();
 
-        if (unityHealthy)
+        var browserTarget =
+            IsBrowserProcess(
+                targetProcessName);
+
+        // A healthy adapter from some other Unity process must never hijack a
+        // selected browser window. Auto mode is target-aware first, then
+        // health-aware.
+        if (unityHealthy &&
+            !browserTarget)
         {
             candidates.Add(
                 new(
                     AutoSourceKind.Unity,
                     "Unity Adapter",
-                    100));
+                    110));
         }
 
         if (BrowserMatches(
@@ -107,15 +115,19 @@ internal sealed class AutoSourceResolver
                         browserSnapshot!.Kind,
                         "youtube-captions",
                         StringComparison.OrdinalIgnoreCase)
-                        ? 110
-                        : 96));
+                        ? 130
+                        : 120));
         }
 
         candidates.Add(
             new(
                 AutoSourceKind.Ocr,
-                "OCR",
-                40));
+                browserTarget
+                    ? "Browser OCR fallback"
+                    : "OCR",
+                browserTarget
+                    ? 70
+                    : 40));
 
         return candidates
             .OrderByDescending(
