@@ -29,8 +29,7 @@ public static class SpeculativeTranslationPolicy
         }
 
         var complete =
-            !markedPartial &&
-            LooksComplete(current);
+            !markedPartial;
 
         if (complete &&
             !string.Equals(
