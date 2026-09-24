@@ -348,33 +348,23 @@ public sealed class TranslationPipeline : IDisposable
                             unityTextKey,
                             unityRegions);
 
-                        var requiredStability =
-                            unityRegions.All(region =>
-                                LooksCompleteForImmediateTranslation(
-                                    region.Text))
-                                ? TimeSpan.Zero
-                                : TimeSpan.FromMilliseconds(75);
+                        var currentSourceText =
+                            string.Join(
+                                "\n",
+                                unityRegions.Select(region =>
+                                    region.Text.Trim()));
 
-                        var textStable =
-                            now -
-                            _pendingUnityTextSince >=
-                            requiredStability;
-
-                        if (!textStable)
-                        {
-                            await RenderUnityAsync(
-                                Array.Empty<TranslatedRegion>(),
-                                frame);
-
-                            StatusChanged?.Invoke(
-                                $"Running · {_capture.BackendName} · Unity Adapter stabilizing text · {unityRegions.Count}/{unitySnapshot.Data.Regions.Count} selected text region(s)");
-
-                            await DelayRemaining(
-                                loopStart,
-                                frameInterval,
-                                cancellationToken);
-                            continue;
-                        }
+                        var speculative =
+                            SpeculativeTranslationPolicy
+                                .Evaluate(
+                                    _lastSpeculativeStartedText,
+                                    currentSourceText,
+                                    now -
+                                    _pendingUnityTextSince,
+                                    markedPartial:
+                                        !unityRegions.All(region =>
+                                            LooksCompleteForImmediateTranslation(
+                                                region.Text)));
 
                         var retryCoolingDown =
                             string.Equals(
@@ -394,8 +384,12 @@ public sealed class TranslationPipeline : IDisposable
 
                         if (needsTranslation &&
                             _unityTranslationTask is null &&
-                            !retryCoolingDown)
+                            !retryCoolingDown &&
+                            speculative.ShouldTranslate)
                         {
+                            _lastSpeculativeStartedText =
+                                currentSourceText;
+
                             StartUnityTranslation(
                                 unityTextKey,
                                 unityRegions,
@@ -431,12 +425,27 @@ public sealed class TranslationPipeline : IDisposable
                                     .ToArray();
                         }
 
-                        var visibleTranslations =
+                        var exactTranslation =
                             string.Equals(
                                 _lastUnityTextKey,
                                 unityTextKey,
-                                StringComparison.Ordinal)
-                                ? _lastUnityTranslations
+                                StringComparison.Ordinal);
+
+                        var reuseSpeculative =
+                            !exactTranslation &&
+                            _lastUnityTranslations.Count ==
+                                unityRegions.Count &&
+                            _lastSpeculativeStartedText.Length > 0 &&
+                            currentSourceText.StartsWith(
+                                _lastSpeculativeStartedText,
+                                StringComparison.Ordinal);
+
+                        var visibleTranslations =
+                            exactTranslation ||
+                            reuseSpeculative
+                                ? RemapTranslations(
+                                    _lastUnityTranslations,
+                                    unityRegions)
                                 : Array.Empty<TranslatedRegion>();
 
                         await RenderUnityAsync(
@@ -452,6 +461,15 @@ public sealed class TranslationPipeline : IDisposable
                             BuildUnityStatusState(
                                 unityTextKey,
                                 retryCoolingDown);
+
+                        if (needsTranslation &&
+                            _unityTranslationTask is null &&
+                            !retryCoolingDown &&
+                            !speculative.ShouldTranslate)
+                        {
+                            state +=
+                                " · coalescing partial text";
+                        }
 
                         StatusChanged?.Invoke(
                             $"Running · {_capture.BackendName} · Unity Adapter {unityScope} · {unityRegions.Count}/{unitySnapshot.Data.Regions.Count} selected text region(s){state}");
@@ -485,7 +503,8 @@ public sealed class TranslationPipeline : IDisposable
                         $"Running · {_capture.BackendName} · Unity Adapter {emptyScope} · 0/{unitySnapshot.Data.Regions.Count} selected text region(s) · semantic OCR fallback");
                 }
 
-                if (useUnityAdapter &&
+                if (sourceDecision.Kind ==
+                        AutoSourceKind.Unity &&
                     !adapterSemanticOcrFallback &&
                     _lastUnityAdapterSeenAt !=
                         DateTimeOffset.MinValue &&
