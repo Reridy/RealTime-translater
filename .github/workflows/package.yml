@@ -1,0 +1,40 @@
+name: package-windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  package:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Test
+        shell: pwsh
+        run: |
+          dotnet restore RealTimeTranslater.sln
+          dotnet build RealTimeTranslater.sln -c Release --no-restore
+          dotnet test tests/RealTimeTranslater.Core.Tests/RealTimeTranslater.Core.Tests.csproj -c Release --no-build
+
+      - name: Build self-contained Windows package
+        shell: powershell
+        run: |
+          .\scripts\publish-windows.ps1
+
+      - name: Upload Windows x64 package
+        uses: actions/upload-artifact@v4
+        with:
+          name: RealTimeTranslater-win-x64
+          path: dist/RealTimeTranslater-win-x64.zip
+          if-no-files-found: error
+          retention-days: 14

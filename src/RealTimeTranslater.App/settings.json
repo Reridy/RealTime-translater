@@ -1,0 +1,31 @@
+{
+  "CaptureFps": 8,
+  "ChangeThreshold": 0.025,
+  "StabilityFrames": 2,
+  "OcrLanguage": "jpn+eng",
+  "OcrRegion": "Full window",
+  "TextSource": "Auto (Recommended)",
+  "UnityDialogueOnly": true,
+  "OcrDataPath": "tessdata",
+  "MinimumOcrConfidence": 45.0,
+  "Translation": {
+    "Provider": "Mock",
+    "SourceLanguage": "ja",
+    "TargetLanguage": "ko",
+    "Mode": "Balanced",
+    "OllamaEndpoint": "http://localhost:11434",
+    "OllamaModel": "translategemma:4b",
+    "LibreTranslateEndpoint": "http://localhost:5000"
+  },
+  "Overlay": {
+    "Mode": "Smart",
+    "BackgroundOpacity": 0.78,
+    "FontSizeScale": 0.82,
+    "MinimumFontSize": 12.0,
+    "MaximumFontSize": 38.0,
+    "SubtitleBackgroundOpacity": 0.58,
+    "SubtitleMaxWidthRatio": 0.74,
+    "SubtitleBottomMargin": 18.0,
+    "AllowScreenshots": false
+  }
+}

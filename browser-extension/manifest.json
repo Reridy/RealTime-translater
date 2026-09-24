@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "RealTime Translater Browser Companion",
+  "version": "0.2.0",
+  "description": "Streams visible browser text and YouTube captions to the local RealTime Translater desktop app.",
+  "permissions": [],
+  "host_permissions": [
+    "http://127.0.0.1:47852/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

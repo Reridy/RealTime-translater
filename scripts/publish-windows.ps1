@@ -1,0 +1,92 @@
+param(
+    [string]$Configuration = "Release",
+    [string]$Runtime = "win-x64"
+)
+
+$ErrorActionPreference = "Stop"
+
+$repo = Split-Path $PSScriptRoot -Parent
+$appProject = Join-Path $repo "src\RealTimeTranslater.App\RealTimeTranslater.App.csproj"
+$tessdata = Join-Path $repo "tessdata"
+$distRoot = Join-Path $repo "dist"
+$publishDir = Join-Path $distRoot "RealTimeTranslater-$Runtime"
+$zipPath = "$publishDir.zip"
+
+$requiredOcr = @(
+    (Join-Path $tessdata "eng.traineddata"),
+    (Join-Path $tessdata "jpn.traineddata")
+)
+
+$missingOcr = $requiredOcr | Where-Object { -not (Test-Path $_) }
+if ($missingOcr.Count -gt 0) {
+    Write-Host "OCR data is missing; downloading tessdata_fast..."
+    & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "download-tessdata.ps1")
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not download OCR language data."
+    }
+}
+
+if (Test-Path $publishDir) {
+    Remove-Item $publishDir -Recurse -Force
+}
+
+New-Item -ItemType Directory -Force -Path $distRoot | Out-Null
+
+Write-Host "Publishing self-contained $Runtime build..."
+& dotnet publish $appProject -c $Configuration -r $Runtime --self-contained true -p:PublishSingleFile=false -p:PublishReadyToRun=true -o $publishDir
+
+if ($LASTEXITCODE -ne 0) {
+    throw "dotnet publish failed."
+}
+
+$publishedTessdata = Join-Path $publishDir "tessdata"
+New-Item -ItemType Directory -Force -Path $publishedTessdata | Out-Null
+
+Copy-Item (Join-Path $tessdata "eng.traineddata") $publishedTessdata -Force
+Copy-Item (Join-Path $tessdata "jpn.traineddata") $publishedTessdata -Force
+
+$publishedDocs = Join-Path $publishDir "docs"
+New-Item -ItemType Directory -Force -Path $publishedDocs | Out-Null
+Copy-Item (Join-Path $repo "docs\UNITY_ADAPTER.md") $publishedDocs -Force
+Copy-Item (Join-Path $repo "docs\BROWSER_COMPANION.md") $publishedDocs -Force
+Copy-Item (Join-Path $PSScriptRoot "setup-recommended-translation-model.ps1") $publishDir -Force
+Copy-Item (Join-Path $PSScriptRoot "build-unity-adapter.ps1") $publishDir -Force
+
+$browserExtension = Join-Path $publishDir "browser-extension"
+Copy-Item (Join-Path $repo "browser-extension") $browserExtension -Recurse -Force
+
+$adapterSource = Join-Path $publishDir "adapter-source\UnityBepInEx"
+New-Item -ItemType Directory -Force -Path $adapterSource | Out-Null
+Copy-Item (Join-Path $repo "adapters\UnityBepInEx\Plugin.cs") $adapterSource -Force
+Copy-Item (Join-Path $repo "adapters\UnityBepInEx\PipePublisher.cs") $adapterSource -Force
+Copy-Item (Join-Path $repo "adapters\UnityBepInEx\RealTimeTranslater.UnityBepInEx.csproj") $adapterSource -Force
+
+$readme = @"
+RealTime Translater - Windows x64
+================================
+
+1. Run RealTimeTranslater.App.exe.
+2. For local AI translation, install Ollama and pull translategemma:4b.
+3. Leave Text source on Auto (Recommended). The app automatically prefers structured sources over OCR.
+4. For supported Unity games, install the optional BepInEx adapter described in docs/UNITY_ADAPTER.md.
+   The package includes build-unity-adapter.ps1 and the adapter source. Building
+   the adapter currently requires the .NET 8 SDK because it references the
+   target game's own Unity/BepInEx assemblies.
+5. For Chrome/Edge/Brave, load the included browser-extension folder as an unpacked extension to enable direct YouTube captions and DOM text. See docs/BROWSER_COMPANION.md.
+6. User settings and the persistent translation cache are stored under:
+   %LOCALAPPDATA%\RealTimeTranslater
+
+This package includes English and Japanese Tesseract OCR data.
+"@
+
+Set-Content -Path (Join-Path $publishDir "README_FIRST.txt") -Value $readme -Encoding UTF8
+
+if (Test-Path $zipPath) {
+    Remove-Item $zipPath -Force
+}
+
+Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath $zipPath -CompressionLevel Optimal
+
+Write-Host ""
+Write-Host "Release package created:"
+Write-Host "  $zipPath"
