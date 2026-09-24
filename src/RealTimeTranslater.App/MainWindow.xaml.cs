@@ -91,13 +91,15 @@ public partial class MainWindow : Window
 
         TextSourceComboBox.ItemsSource = new[]
         {
-            "OCR",
-            "Unity Adapter + OCR fallback"
+            "Auto (Recommended)",
+            "Unity Adapter + OCR fallback",
+            "Browser Companion + OCR fallback",
+            "OCR"
         };
         TextSourceComboBox.SelectedItem =
             TextSourceComboBox.Items.Contains(_settings.TextSource)
                 ? _settings.TextSource
-                : "OCR";
+                : "Auto (Recommended)";
         UnityDialogueOnlyCheckBox.IsChecked =
             _settings.UnityDialogueOnly;
         UpdateUnityScopeAvailability();
@@ -555,7 +557,9 @@ public partial class MainWindow : Window
                 _settings,
                 sourceLanguage,
                 targetLanguage,
-                _settings.TextSource);
+                _settings.TextSource,
+                target.ProcessName,
+                target.Title);
 
             pipeline.StatusChanged += OnPipelineStatusChanged;
             _activePipeline = pipeline;
@@ -719,12 +723,21 @@ public partial class MainWindow : Window
 
     private void UpdateUnityScopeAvailability()
     {
-        var useUnityAdapter = string.Equals(
-            TextSourceComboBox.SelectedItem?.ToString(),
-            "Unity Adapter + OCR fallback",
-            StringComparison.OrdinalIgnoreCase);
+        var selected =
+            TextSourceComboBox.SelectedItem?.ToString();
 
-        UnityDialogueOnlyCheckBox.IsEnabled = useUnityAdapter;
+        var useUnityAdapter =
+            string.Equals(
+                selected,
+                "Unity Adapter + OCR fallback",
+                StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(
+                selected,
+                "Auto (Recommended)",
+                StringComparison.OrdinalIgnoreCase);
+
+        UnityDialogueOnlyCheckBox.IsEnabled =
+            useUnityAdapter;
     }
 
     private void ProviderComboBox_SelectionChanged(
