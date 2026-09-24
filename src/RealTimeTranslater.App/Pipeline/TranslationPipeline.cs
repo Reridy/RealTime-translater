@@ -27,8 +27,12 @@ public sealed class TranslationPipeline : IDisposable
     private readonly string _sourceLanguage;
     private readonly string _targetLanguage;
     private readonly string _textSourceMode;
+    private readonly string _targetProcessName;
+    private readonly string _targetTitle;
     private readonly IReadOnlyList<string> _baseTranslationContext;
     private readonly UnityAdapterReceiver _unityAdapterReceiver = new();
+    private readonly BrowserCompanionReceiver _browserCompanionReceiver = new();
+    private readonly AutoSourceResolver _autoSourceResolver = new();
     private readonly HashSet<string> _learnedUnityTextObjects =
         new(StringComparer.Ordinal);
 
@@ -57,6 +61,8 @@ public sealed class TranslationPipeline : IDisposable
     private Task<UnityTranslationAttempt>? _unityTranslationTask;
     private CancellationTokenSource? _unityTranslationCancellation;
     private string _unityTranslationTaskKey = string.Empty;
+    private string _lastSpeculativeStartedText = string.Empty;
+    private AutoSourceKind? _lastResolvedSource;
 
     public TranslationPipeline(
         IntPtr targetWindow,
@@ -66,7 +72,9 @@ public sealed class TranslationPipeline : IDisposable
         AppSettings settings,
         string sourceLanguage,
         string targetLanguage,
-        string textSourceMode)
+        string textSourceMode,
+        string targetProcessName,
+        string targetTitle)
     {
         _targetWindow = targetWindow;
         _ocr = ocr;
@@ -75,6 +83,8 @@ public sealed class TranslationPipeline : IDisposable
         _sourceLanguage = sourceLanguage;
         _targetLanguage = targetLanguage;
         _textSourceMode = textSourceMode;
+        _targetProcessName = targetProcessName;
+        _targetTitle = targetTitle;
         _baseTranslationContext =
             BuildGlossaryContext(
                 settings.Translation.GlossaryText);
@@ -100,10 +110,25 @@ public sealed class TranslationPipeline : IDisposable
             1000.0 / Math.Clamp(_settings.CaptureFps, 1, 30));
 
         var forcedOcrFrames = 0;
-        var useUnityAdapter = string.Equals(
-            _textSourceMode,
-            "Unity Adapter + OCR fallback",
-            StringComparison.OrdinalIgnoreCase);
+        var autoSource =
+            string.Equals(
+                _textSourceMode,
+                "Auto (Recommended)",
+                StringComparison.OrdinalIgnoreCase);
+
+        var useUnityAdapter =
+            autoSource ||
+            string.Equals(
+                _textSourceMode,
+                "Unity Adapter + OCR fallback",
+                StringComparison.OrdinalIgnoreCase);
+
+        var useBrowserCompanion =
+            autoSource ||
+            string.Equals(
+                _textSourceMode,
+                "Browser Companion + OCR fallback",
+                StringComparison.OrdinalIgnoreCase);
 
         using var adapterCancellation =
             CancellationTokenSource.CreateLinkedTokenSource(
@@ -111,6 +136,10 @@ public sealed class TranslationPipeline : IDisposable
 
         var unityReceiverTask = useUnityAdapter
             ? _unityAdapterReceiver.RunAsync(adapterCancellation.Token)
+            : Task.CompletedTask;
+
+        var browserReceiverTask = useBrowserCompanion
+            ? _browserCompanionReceiver.RunAsync(adapterCancellation.Token)
             : Task.CompletedTask;
 
         StatusChanged?.Invoke("Running");
@@ -562,14 +591,18 @@ public sealed class TranslationPipeline : IDisposable
         finally
         {
             CancelUnityTranslation();
+            adapterCancellation.Cancel();
 
-            if (useUnityAdapter)
+            foreach (var task in
+                     new[]
+                     {
+                         unityReceiverTask,
+                         browserReceiverTask
+                     })
             {
-                adapterCancellation.Cancel();
-
                 try
                 {
-                    await unityReceiverTask;
+                    await task;
                 }
                 catch (OperationCanceledException)
                 {
@@ -619,6 +652,7 @@ public sealed class TranslationPipeline : IDisposable
     public void Dispose()
     {
         CancelUnityTranslation();
+        _browserCompanionReceiver.Dispose();
         _capture.Dispose();
     }
 
