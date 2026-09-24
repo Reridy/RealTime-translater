@@ -217,6 +217,7 @@ public sealed class TranslationPipeline : IDisposable
                 if (useBrowserCompanion &&
                     _browserCompanionReceiver.TryGetLatest(
                         TimeSpan.FromSeconds(2),
+                        _targetTitle,
                         out var freshBrowserSnapshot))
                 {
                     browserSnapshot =
