@@ -206,6 +206,16 @@ public sealed class BrowserCompanionReceiver : IDisposable
                     return;
                 }
 
+                if (!IsTrustedBrowserBridge(
+                        request.Headers))
+                {
+                    await WriteResponseAsync(
+                        stream,
+                        403,
+                        cancellationToken);
+                    return;
+                }
+
                 var snapshot =
                     JsonSerializer.Deserialize<
                         BrowserCompanionSnapshot>(
@@ -363,7 +373,8 @@ public sealed class BrowserCompanionReceiver : IDisposable
             return new LocalHttpRequest(
                 requestLine[0],
                 requestLine[1],
-                string.Empty);
+                string.Empty,
+                headers);
         }
 
         if (!headers.TryGetValue(
@@ -427,7 +438,8 @@ public sealed class BrowserCompanionReceiver : IDisposable
             requestLine[0],
             requestLine[1],
             Encoding.UTF8.GetString(
-                body));
+                body),
+            headers);
     }
 
     private static int FindHeaderEnd(
@@ -460,14 +472,14 @@ public sealed class BrowserCompanionReceiver : IDisposable
             {
                 204 => "No Content",
                 400 => "Bad Request",
+                403 => "Forbidden",
                 404 => "Not Found",
                 _ => "OK"
             };
 
         var response =
             $"HTTP/1.1 {statusCode} {reason}\r\n" +
-            "Access-Control-Allow-Origin: *\r\n" +
-            "Access-Control-Allow-Headers: Content-Type\r\n" +
+            "Access-Control-Allow-Headers: Content-Type, X-RealTime-Translater\r\n" +
             "Access-Control-Allow-Methods: POST, OPTIONS\r\n" +
             "Cache-Control: no-store\r\n" +
             "Connection: close\r\n" +
@@ -477,6 +489,38 @@ public sealed class BrowserCompanionReceiver : IDisposable
             Encoding.ASCII.GetBytes(
                 response),
             cancellationToken);
+    }
+
+    private static bool IsTrustedBrowserBridge(
+        IReadOnlyDictionary<string, string> headers)
+    {
+        if (!headers.TryGetValue(
+                "X-RealTime-Translater",
+                out var bridge) ||
+            !string.Equals(
+                bridge,
+                "browser-companion-v1",
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!headers.TryGetValue(
+                "Origin",
+                out var origin) ||
+            string.IsNullOrWhiteSpace(origin))
+        {
+            // MV3 service-worker requests can omit Origin. The non-forgeable
+            // custom header still prevents accidental page-origin posts.
+            return true;
+        }
+
+        return origin.StartsWith(
+                "chrome-extension://",
+                StringComparison.OrdinalIgnoreCase) ||
+            origin.StartsWith(
+                "moz-extension://",
+                StringComparison.OrdinalIgnoreCase);
     }
 
     private static int TitleScore(
@@ -530,5 +574,6 @@ public sealed class BrowserCompanionReceiver : IDisposable
     private sealed record LocalHttpRequest(
         string Method,
         string Path,
-        string Body);
+        string Body,
+        IReadOnlyDictionary<string, string> Headers);
 }
