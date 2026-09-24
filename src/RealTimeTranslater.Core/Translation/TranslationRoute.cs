@@ -42,7 +42,7 @@ public static class TranslationDifficultyRouter
         var quoteCount =
             normalized.Count(ch =>
                 ch is '"' or '“' or '”' or
-                    ''' or '‘' or '’');
+                    '\'' or '‘' or '’');
 
         var hasUsefulContext =
             context is not null &&
