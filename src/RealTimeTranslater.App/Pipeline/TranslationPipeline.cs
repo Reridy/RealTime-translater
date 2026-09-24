@@ -313,6 +313,12 @@ public sealed class TranslationPipeline : IDisposable
                         var now =
                             DateTimeOffset.UtcNow;
 
+                        var currentSourceText =
+                            string.Join(
+                                "\n",
+                                unityRegions.Select(region =>
+                                    region.Text.Trim()));
+
                         if (!string.Equals(
                                 unityTextKey,
                                 _pendingUnityTextKey,
@@ -323,10 +329,17 @@ public sealed class TranslationPipeline : IDisposable
                             _pendingUnityTextSince =
                                 now;
 
+                            var isPrefixGrowth =
+                                _lastSpeculativeStartedText.Length > 0 &&
+                                currentSourceText.StartsWith(
+                                    _lastSpeculativeStartedText,
+                                    StringComparison.Ordinal);
+
                             if (!string.Equals(
                                     _lastUnityTextKey,
                                     unityTextKey,
-                                    StringComparison.Ordinal))
+                                    StringComparison.Ordinal) &&
+                                !isPrefixGrowth)
                             {
                                 _lastUnityTranslations =
                                     Array.Empty<TranslatedRegion>();
@@ -347,12 +360,6 @@ public sealed class TranslationPipeline : IDisposable
                         await HarvestUnityTranslationAsync(
                             unityTextKey,
                             unityRegions);
-
-                        var currentSourceText =
-                            string.Join(
-                                "\n",
-                                unityRegions.Select(region =>
-                                    region.Text.Trim()));
 
                         var speculative =
                             SpeculativeTranslationPolicy
