@@ -10,7 +10,7 @@ public sealed class AppSettings
     public int StabilityFrames { get; set; } = 2;
     public string OcrLanguage { get; set; } = "jpn+eng";
     public string OcrRegion { get; set; } = "Full window";
-    public string TextSource { get; set; } = "OCR";
+    public string TextSource { get; set; } = "Auto (Recommended)";
     public bool UnityDialogueOnly { get; set; } = true;
     public string OcrDataPath { get; set; } = "tessdata";
     public float MinimumOcrConfidence { get; set; } = 45f;
@@ -129,7 +129,7 @@ public sealed class GameProfileSettings
 {
     public string OcrLanguage { get; set; } = "jpn+eng";
     public string OcrRegion { get; set; } = "Full window";
-    public string TextSource { get; set; } = "OCR";
+    public string TextSource { get; set; } = "Auto (Recommended)";
     public bool UnityDialogueOnly { get; set; } = true;
     public string TargetLanguage { get; set; } = "ko";
     public string TranslationMode { get; set; } = "Balanced";
