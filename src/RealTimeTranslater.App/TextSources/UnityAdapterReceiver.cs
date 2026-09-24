@@ -139,7 +139,7 @@ internal sealed class UnityAdapterReceiver
         }
 
         if (dto is null ||
-            dto.Protocol != 1 ||
+            dto.Protocol is < 1 or > 2 ||
             dto.ScreenWidth < 1 ||
             dto.ScreenHeight < 1)
         {
