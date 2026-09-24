@@ -1,14 +1,18 @@
 # RealTime Translater
 
-A Windows-first real-time game screen translation overlay.
+A Windows-first universal real-time translation overlay for games, browser video, and desktop content.
 
-The MVP captures a selected game window, skips unchanged frames, runs OCR, stabilizes noisy OCR output, translates only new text, and renders the selected target language over the original screen position with a click-through overlay.
+The app resolves the best available text source automatically: exact Unity UI text when the optional adapter is present, direct browser/YouTube caption text through the Browser Companion, and OCR as the universal fallback. Translation is cached, difficulty-routed, coalesced during typewriter growth, and rendered through a click-through overlay.
 
 ## MVP status
 
 Implemented on the feature/mvp-realtime-translation branch:
 
 - Select any visible Windows desktop game/window.
+- Auto Source Resolver continuously promotes the healthiest structured source and falls back automatically: YouTube Captions / Browser DOM, Unity Adapter, then OCR.
+- Browser Companion (Manifest V3) streams rendered YouTube captions and visible semantic DOM text over a localhost-only bridge, avoiding OCR when structured browser text is available.
+- Automatic translation difficulty router sends short/simple text through a lower-latency budget and escalates failed or difficult text to Standard/Quality budgets.
+- Partial/speculative translation coalesces typewriter text, cancels stale requests, keeps the previous useful partial subtitle visible, and promotes punctuation-complete text immediately.
 - Capture the selected window with Windows Graphics Capture, with automatic GDI fallback if WGC cannot initialize.
 - Ignore mostly unchanged frames using a lightweight frame-difference detector.
 - OCR text lines with Tesseract 5.
@@ -55,13 +59,13 @@ Requirements:
 
     dotnet run --project src/RealTimeTranslater.App
 
-4. Pick the game window, choose an OCR language/area, target language, translation mode, and provider, then press Start. The app remembers these choices automatically for that game process on later launches.
+4. Pick the target window, keep **Text source** on **Auto (Recommended)**, choose a target language and provider, then press Start. The app remembers choices automatically for that target process. For browser/YouTube direct text, load the optional Browser Companion from `browser-extension/` as described in `docs/BROWSER_COMPANION.md`.
 
 For real translation without a cloud API key, run a local Ollama server and select Ollama in the app. The model name and endpoint are editable in the UI.
 
 ## Current limitations
 
-This is an MVP, not yet a universal game translator.
+This is an active release candidate for a universal realtime translator; several source adapters and packaging details still need broader field testing.
 
 - Windows Graphics Capture is the primary backend. If it is unavailable, the app falls back to GDI CopyFromScreen; that fallback requires the target window to stay visible and can be affected by occlusion.
 - Minimized target windows are not captured.
@@ -69,9 +73,11 @@ This is an MVP, not yet a universal game translator.
 - Tesseract OCR quality depends heavily on game font/background and installed traineddata.
 - Replace mode uses local background-color reconstruction rather than full image inpainting. It works especially well on dialogue boxes and flat UI backgrounds; highly textured text backgrounds can still reveal a small patched area.
 - Anti-cheat protected games may behave differently. The app does not inject into the game process or read game memory.
-- OCR is full-window in this MVP; configurable regions and automatic text detection are planned.
+- OCR can be limited to preset regions, but a freeform ROI editor and learned text detector are still planned.
+- Browser Companion currently reads rendered YouTube captions and semantic DOM text; audio-only transcription/ASR is a later source adapter.
+- Browser direct-text support is currently packaged as an unpacked Manifest V3 extension for Chromium-family browsers and still needs store packaging/signing.
 
-For the Unity/BepInEx proof-of-concept adapter, see docs/UNITY_ADAPTER.md.
+For Unity/BepInEx direct text, see docs/UNITY_ADAPTER.md. For browser/YouTube direct text, see docs/BROWSER_COMPANION.md.
 
 See docs/ARCHITECTURE.md and docs/ROADMAP.md for the design and next implementation phases.
 
