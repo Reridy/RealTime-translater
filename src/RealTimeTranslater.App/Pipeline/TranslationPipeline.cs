@@ -1048,6 +1048,7 @@ public sealed class TranslationPipeline : IDisposable
             string textKey,
             IReadOnlyList<TextRegion> regions,
             IReadOnlyList<string> context,
+            bool isFinal,
             CancellationToken cancellationToken)
     {
         var started =
