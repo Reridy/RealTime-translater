@@ -31,7 +31,8 @@ public sealed class TranslationCoordinator
         string sourceLanguage,
         string targetLanguage,
         CancellationToken cancellationToken,
-        IReadOnlyList<string>? additionalContext = null)
+        IReadOnlyList<string>? additionalContext = null,
+        bool transient = false)
     {
         var entries = regions
             .Select((region, index) => new PendingRegion(
@@ -144,11 +145,14 @@ public sealed class TranslationCoordinator
                         completedIndexes.Add(
                             chunk[i].Index);
 
-                        _cache.Set(
-                            sourceLanguage,
-                            targetLanguage,
-                            chunk[i].Text,
-                            translated);
+                        if (!transient)
+                        {
+                            _cache.Set(
+                                sourceLanguage,
+                                targetLanguage,
+                                chunk[i].Text,
+                                translated);
+                        }
                     }
                 }
                 catch (OperationCanceledException)
@@ -212,11 +216,14 @@ public sealed class TranslationCoordinator
             translatedByIndex[entry.Index] =
                 translated;
 
-            _cache.Set(
-                sourceLanguage,
-                targetLanguage,
-                entry.Text,
-                translated);
+            if (!transient)
+            {
+                _cache.Set(
+                    sourceLanguage,
+                    targetLanguage,
+                    entry.Text,
+                    translated);
+            }
         }
 
         var result =
@@ -240,8 +247,11 @@ public sealed class TranslationCoordinator
                     SourceLineCount: entry.Region.SourceLineCount,
                     SourceAlignment: entry.Region.SourceAlignment));
 
-            Remember(
-                $"{entry.Text} => {translated}");
+            if (!transient)
+            {
+                Remember(
+                    $"{entry.Text} => {translated}");
+            }
         }
 
         LastMetrics =
