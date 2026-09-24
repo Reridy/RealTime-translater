@@ -593,6 +593,58 @@ public sealed class TranslationPipeline : IDisposable
                                     StringComparer.Ordinal)
                                 .ToArray();
 
+                        var ocrTextKey =
+                            "ocr:" +
+                            BuildTextKey(
+                                stableRegions);
+
+                        var ocrSourceText =
+                            string.Join(
+                                "\n",
+                                stableRegions.Select(region =>
+                                    region.Text.Trim()));
+
+                        var now =
+                            DateTimeOffset.UtcNow;
+
+                        if (!string.Equals(
+                                _pendingUnityTextKey,
+                                ocrTextKey,
+                                StringComparison.Ordinal))
+                        {
+                            _pendingUnityTextKey =
+                                ocrTextKey;
+                            _pendingUnityTextSince =
+                                now;
+                        }
+
+                        var speculative =
+                            SpeculativeTranslationPolicy
+                                .Evaluate(
+                                    _lastSpeculativeStartedText,
+                                    ocrSourceText,
+                                    now -
+                                    _pendingUnityTextSince,
+                                    markedPartial:
+                                        !stableRegions.All(region =>
+                                            LooksCompleteForImmediateTranslation(
+                                                region.Text)));
+
+                        if (!speculative.ShouldTranslate)
+                        {
+                            StatusChanged?.Invoke(
+                                $"Running · {_capture.BackendName} · Auto→OCR · coalescing partial text ({stableRegions.Count} line(s))");
+
+                            await DelayRemaining(
+                                loopStart,
+                                frameInterval,
+                                cancellationToken);
+                            continue;
+                        }
+
+                        _lastSpeculativeStartedText =
+                            ocrSourceText;
+
                         try
                         {
                             var translated =
