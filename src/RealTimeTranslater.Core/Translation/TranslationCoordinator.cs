@@ -9,6 +9,13 @@ public sealed class TranslationCoordinator
     private readonly Queue<string> _context = new();
     private readonly int _contextLimit;
 
+    public TranslationRunMetrics LastMetrics { get; private set; } =
+        new(
+            0,
+            0,
+            0,
+            TranslationRoute.Fast);
+
     public TranslationCoordinator(
         ITranslationProvider provider,
         TranslationCache? cache = null,
@@ -43,6 +50,11 @@ public sealed class TranslationCoordinator
         var misses =
             new List<PendingRegion>();
 
+        var cacheHits = 0;
+        var providerCalls = 0;
+        var strongestRoute =
+            TranslationRoute.Fast;
+
         foreach (var entry in entries)
         {
             if (_cache.TryGet(
@@ -53,6 +65,7 @@ public sealed class TranslationCoordinator
             {
                 translatedByIndex[entry.Index] =
                     cached;
+                cacheHits++;
             }
             else
             {
@@ -79,15 +92,32 @@ public sealed class TranslationCoordinator
                         additionalContext);
 
                 var requests = chunk
-                    .Select(entry => new TranslationRequest(
-                        entry.Text,
-                        sourceLanguage,
-                        targetLanguage,
-                        requestContext))
+                    .Select(entry =>
+                    {
+                        var route =
+                            TranslationDifficultyRouter
+                                .Classify(
+                                    entry.Text,
+                                    requestContext);
+
+                        strongestRoute =
+                            Strongest(
+                                strongestRoute,
+                                route);
+
+                        return new TranslationRequest(
+                            entry.Text,
+                            sourceLanguage,
+                            targetLanguage,
+                            requestContext,
+                            route);
+                    })
                     .ToArray();
 
                 try
                 {
+                    providerCalls++;
+
                     var batch =
                         await batchProvider.TranslateBatchAsync(
                             requests,
@@ -151,13 +181,27 @@ public sealed class TranslationCoordinator
                 BuildRequestContext(
                     additionalContext);
 
+            var route =
+                TranslationDifficultyRouter
+                    .Classify(
+                        entry.Text,
+                        requestContext);
+
+            strongestRoute =
+                Strongest(
+                    strongestRoute,
+                    route);
+
+            providerCalls++;
+
             var translated =
                 await _provider.TranslateAsync(
                     new TranslationRequest(
                         entry.Text,
                         sourceLanguage,
                         targetLanguage,
-                        requestContext),
+                        requestContext,
+                        route),
                     cancellationToken);
 
             translated = translated.Trim();
@@ -200,8 +244,22 @@ public sealed class TranslationCoordinator
                 $"{entry.Text} => {translated}");
         }
 
+        LastMetrics =
+            new TranslationRunMetrics(
+                entries.Length,
+                cacheHits,
+                providerCalls,
+                strongestRoute);
+
         return result;
     }
+
+    private static TranslationRoute Strongest(
+        TranslationRoute left,
+        TranslationRoute right)
+        => (TranslationRoute)Math.Max(
+            (int)left,
+            (int)right);
 
     public void StoreCorrection(
         IEnumerable<string> sourceLanguages,
